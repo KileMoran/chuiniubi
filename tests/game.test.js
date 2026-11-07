@@ -15,3 +15,62 @@ test('最后一手真牌质疑失败可获胜；假牌被抓不能获胜',()=>{c
  const keep=own[0];g.players[(i+1)%4].hand.push(...own.slice(1));g.players[i].hand=[keep];
  playCards(g,tokens[i],[keep.id],keep.rank);challenge(g,tokens[(i+1)%4]);resolveAccuse(g);startCollect(g);completeCollect(g);assert.equal(g.winner,i);assert.equal(g.phase,'finished');assert.equal(totalCards(g),104);
  const h=setup(4),j=h.turn;const card=h.players[j].hand[0];h.players[(j+1)%4].hand.push(...h.players[j].hand.slice(1));h.players[j].hand=[card];const lie=RANKS.find(r=>r!==card.rank);playCards(h,tokens[j],[card.id],lie);challenge(h,tokens[(j+1)%4]);resolveAccuse(h);startCollect(h);completeCollect(h);assert.equal(h.winner,null);assert.ok(h.players[j].hand.length>=1);assert.equal(totalCards(h),104);});
+
+// V7.7: new lobby sizes, explicit rank claims, and conservation across configurable decks.
+test('1–6人发牌精确匹配副数：1–2人52张、3人208张、4–6人104张',()=>{
+ for(const n of [1,2,3,4,5,6]){
+  const g=freshGame('CARD77',n);
+  for(let i=0;i<n;i++)addPlayer(g,tokens[i],`玩家${i+1}`);
+  startGame(g,tokens[0],tokens.slice(0,n));beginTurn(g);
+  const expected=n<=2?52:n===3?208:104;
+  assert.equal(totalCards(g),expected,`${n} 人牌总数`);
+  assert.equal(publicState(g,tokens[0],tokens.slice(0,n)).deckCount,expected/52);
+  const sizes=g.players.map(p=>p.hand.length);
+  assert.ok(Math.max(...sizes)-Math.min(...sizes)<=1,`${n} 人发牌不均`);
+  const first=g.players[g.turn].hand[0];
+  playCards(g,tokens[g.turn],[first.id],first.rank);
+  assert.equal(totalCards(g),expected,`${n} 人首次出牌后守恒`);
+ }
+});
+test('每轮第一手必须明确选择宣称点数；沿用上一轮的空值不能出牌',()=>{
+ const g=setup(4),i=g.turn,first=g.players[i].hand[0];
+ assert.throws(()=>playCards(g,tokens[i],[first.id],undefined),/请选择正确点数/);
+ assert.throws(()=>playCards(g,tokens[i],[first.id],''),/请选择正确点数/);
+ assert.throws(()=>playCards(g,tokens[i],[first.id],'1'),/请选择正确点数/);
+ playCards(g,tokens[i],[first.id],'3');
+ challenge(g,tokens[(i+1)%4]);resolveAccuse(g);startCollect(g);completeCollect(g);
+ assert.equal(g.rank,null);
+ const j=g.turn,second=g.players[j].hand[0];
+ assert.throws(()=>playCards(g,tokens[j],[second.id],''),/请选择正确点数/);
+ playCards(g,tokens[j],[second.id],'K');
+ assert.equal(g.rank,'K');
+});
+test('单人练习每手自动清桌、重置点数，直到52张出完获胜',()=>{
+ const g=freshGame('SOLO77',1);addPlayer(g,tokens[0],'练习者');startGame(g,tokens[0],[tokens[0]]);beginTurn(g);
+ let moves=0;
+ while(g.phase!=='finished' && moves<20){
+  const before=g.players[0].hand.length;
+  const ids=g.players[0].hand.slice(0,8).map(c=>c.id);
+  playCards(g,tokens[0],ids,'A');
+  assert.equal(totalCards(g),52);
+  finishCooldown(g);
+  moves++;
+  assert.equal(totalCards(g),52);
+  if(g.phase==='playing'){
+   assert.equal(g.turn,0);assert.equal(g.rank,null);
+   assert.equal(g.pile.length,0);
+   assert.equal(g.discard.length,52-g.players[0].hand.length);
+   assert.ok(g.players[0].hand.length<before);
+  }
+ }
+ assert.equal(moves,7);assert.equal(g.phase,'finished');assert.equal(g.winner,0);assert.equal(g.players[0].hand.length,0);
+});
+test('双人可跟牌、可质疑，质疑结束重开空点数回合',()=>{
+ const g=freshGame('DUO777',2);for(let i=0;i<2;i++)addPlayer(g,tokens[i],`玩家${i}`);
+ startGame(g,tokens[0],tokens.slice(0,2));beginTurn(g);
+ const i=g.turn,j=(i+1)%2,rank='Q';
+ playCards(g,tokens[i],[g.players[i].hand[0].id],rank);
+ challenge(g,tokens[j]);resolveAccuse(g);startCollect(g);completeCollect(g);
+ assert.equal(g.round,2);assert.equal(g.rank,null);assert.equal(g.phase,'playing');
+ assert.equal(totalCards(g),52);
+});

@@ -1,6 +1,9 @@
 // 吹牛逼 · server-authoritative game logic. Never import this file in the browser.
 export const RANKS = ['2','A','K','Q','J','10','9','8','7','6','5','4','3'];
 const SUITS=['♠','♥','♣','♦'];
+// 1–2 玩家：一副（52张）；3玩家：四副（208张）；4–6玩家：沿用两副（104张）。
+export function deckCountForCapacity(capacity){return capacity<=2?1:capacity===3?4:2;}
+export function expectedCardCount(capacity){return 52*deckCountForCapacity(capacity);}
 export function err(condition,message){if(!condition)throw new Error(message);}
 export function freshGame(room='',capacity=5){return {
  room,capacity,players:[],host:null,phase:'lobby',phaseUntil:0,round:0,rank:null,turn:null,
@@ -20,7 +23,7 @@ export function startGame(g,actor,onlineIds){
  err(g.phase==='lobby'||g.phase==='finished','当前无法开始');err(g.host===actor,'只有房主能开始');
  err(g.players.length===g.capacity,'需要先凑齐房间人数');
  err(g.players.every(p=>onlineIds.includes(p.id)),'有玩家掉线，请等待重连');
- const deck=[];let id=0;for(let d=0;d<2;d++)for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});shuffle(deck);
+ const deck=[];let id=0;for(let d=0;d<deckCountForCapacity(g.capacity);d++)for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});shuffle(deck);
  g.players.forEach(p=>p.hand=[]);deck.forEach((c,i)=>g.players[i%g.players.length].hand.push(c));g.players.forEach(p=>sortCards(p.hand));
  g.phase='choosing';g.phaseUntil=Date.now()+2500;g.round=1;g.rank=null;g.pile=[];g.discard=[];g.last=null;g.passes=0;g.turn=null;g.moveId=0;g.cardSlot=0;g.winner=null;g.result=null;g.stats={caught:0,failed:0};
  g.starter=randomInt(g.players.length);event(g,'draw',{player:g.starter,text:'系统正在随机抽取先手'});
@@ -68,6 +71,8 @@ export function completeCollect(g){
 export function finishCooldown(g){
  err(g.phase==='cooldown','状态错误');const last=g.last;
  if(g.players[last.player].hand.length===0){g.winner=last.player;g.phase='finished';g.phaseUntil=0;g.turn=null;event(g,'win',{player:g.winner,text:`${g.players[g.winner].name} 获胜！`});return;}
+ // 单人练习没有其他玩家可以跟牌/质疑：每手结束后自动弃置暗牌并开启新回合。
+ if(g.players.length===1){g.discard.push(...g.pile.map(p=>p.card));g.pile=[];newRound(g,last.player);return;}
  g.phase='playing';g.phaseUntil=0;g.turn=nextTurn(g,last.player);event(g,'turn',{player:g.turn,text:`轮到${g.players[g.turn].name}`});
 }
 export function finishDiscard(g){err(g.phase==='discarding','状态错误');const nextStarter=g.last.player;
@@ -81,7 +86,7 @@ export function totalCards(g){return g.players.reduce((n,p)=>n+p.hand.length,0)+
 export function publicState(g,id,onlineIds=[]){
  const reveal=['reveal','collecting'].includes(g.phase);const index=playerIndex(g,id);
  return {room:g.room,capacity:g.capacity,host:playerIndex(g,g.host),me:index,players:g.players.map(p=>({id:`seat-${p.seat}`,name:p.name,seat:p.seat,count:p.hand.length,online:onlineIds.includes(p.id),host:p.id===g.host})),
- phase:g.phase,phaseUntil:g.phaseUntil,serverNow:Date.now(),round:g.round,rank:g.rank,turn:g.turn,starter:g.phase==='choosing'?null:g.starter,
+ phase:g.phase,phaseUntil:g.phaseUntil,serverNow:Date.now(),round:g.round,rank:g.rank,deckCount:deckCountForCapacity(g.capacity),turn:g.turn,starter:g.phase==='choosing'?null:g.starter,
  last:g.last?{...g.last}:null,passes:g.passes,discardCount:g.discard.length,
  pile:g.pile.map(p=>({slot:p.slot,owner:p.owner,moveId:p.moveId,...(reveal?{card:p.card}: {})})),
  hand:index>=0?g.players[index].hand:[],winner:g.winner,result:reveal?g.result:null,

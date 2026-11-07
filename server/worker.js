@@ -1,5 +1,5 @@
 import {DurableObject} from 'cloudflare:workers';
-import {freshGame,addPlayer,playerIndex,startGame,playCards,passTurn,challenge,tick,publicState,totalCards,event} from './game.js';
+import {freshGame,addPlayer,playerIndex,startGame,playCards,passTurn,challenge,tick,publicState,totalCards,expectedCardCount,event} from './game.js';
 
 const isToken=s=>/^[a-f0-9-]{36}$/i.test(s||'');
 const isRoom=s=>/^[A-Z0-9]{6}$/.test(s||'');
@@ -14,7 +14,7 @@ async function realtimeApi(env,uri,method='POST',body){
 
 export default {
  async fetch(request,env){const url=new URL(request.url);
-  if(url.pathname==='/health')return Response.json({ok:true,service:'吹牛逼·联机服务器',version:'1.1-voice'});
+  if(url.pathname==='/health')return Response.json({ok:true,service:'吹牛逼·联机服务器',version:'1.1-voice',gameplay:'v7.7'});
   if(url.pathname!=='/ws')return new Response('Use /health or /ws',{status:404});
   if(request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return new Response('WebSocket required',{status:426});
   const room=url.searchParams.get('room')?.toUpperCase();
@@ -65,7 +65,7 @@ export class GameRoom extends DurableObject{
   const url=new URL(request.url);const room=url.searchParams.get('room')?.toUpperCase();const token=url.searchParams.get('token');const rawName=url.searchParams.get('name')||'玩家';
   const name=[...rawName.replace(/[\u0000-\u001f\u007f<>]/g,'').trim()].slice(0,12).join('')||'玩家';
   const create=url.searchParams.get('create')==='1';const capacity=Number(url.searchParams.get('capacity')||'5');
-  if(!this.g){if(!create)return new Response('该房间不存在，请先创建房间',{status:404});if(!Number.isInteger(capacity)||capacity<4||capacity>6)return new Response('人数需为4至6',{status:400});this.g=freshGame(room,capacity);}
+  if(!this.g){if(!create)return new Response('该房间不存在，请先创建房间',{status:404});if(!Number.isInteger(capacity)||capacity<1||capacity>6)return new Response('人数需为1至6',{status:400});this.g=freshGame(room,capacity);}
   if(this.g.room!==room)return new Response('房间不匹配',{status:400});
   let player=this.g.players.find(p=>p.id===token);if(!player){try{player=addPlayer(this.g,token,name);}catch(e){return new Response(e.message,{status:409});}}
   for(const old of this.ctx.getWebSockets())if(old.deserializeAttachment()?.id===player.id)try{old.close(1000,'同一身份在新窗口加入');}catch{}
@@ -105,7 +105,7 @@ export class GameRoom extends DurableObject{
     }
     default:throw new Error('未知操作');
    }
-   if(this.g.phase!=='lobby'&&this.g.phase!=='finished'&&totalCards(this.g)!==104)throw new Error('牌数校验失败');
+   if(this.g.phase!=='lobby'&&this.g.phase!=='finished'&&totalCards(this.g)!==expectedCardCount(this.g.capacity))throw new Error('牌数校验失败');
    await this.save();this.broadcast();
   }catch(e){this.send(ws,{type:'error',message:e.message||'操作失败'});}
  }
