@@ -1,85 +1,62 @@
-# 吹牛逼 · 真人联机版（4–6 人）
+# 吹牛逼 V7.4 — 语音 + 手机横屏版
 
-中国大学宿舍纸箱牌桌，朋友通过六位房间号实时联机；无 AI。
+## 游戏已改动
+- 手机竖屏：上方牌桌，下方操作和手牌；头像不越界，手牌可滚动。
+- 手机横屏：左侧牌桌（58%），右侧操作台（42%），出牌/质疑/不出牌和手牌全在可操作区域。
+- 语音：加入语音、退出语音、麦克风开关、静音扬声器、好友独立音量、头像说话提示。
+- 不启用语音时仍保留原来的 Cloudflare 游戏房间、牌数和重连机制。
+- 语音默认关闭；网页刷新后不会擅自重新开启麦克风。
 
-> 前端：GitHub Pages；游戏服务器：Cloudflare Workers + Durable Objects。两个服务都必须上线才能真正联机。本仓库与斗地主项目完全独立。
+## 第一部分：替换 GitHub 文件
 
-## 一、零命令上线（只使用浏览器）
+打开 https://github.com/KileMoran/chuiniubi ，解压本包。GitHub 仓库需要更新：
+1. `index.html` — 网页前端（手机布局 + 语音按钮）
+2. `server/worker.js` — Cloudflare Worker（语音令牌处理）
 
-### 1. 创建 GitHub 仓库
+其它文件 `server/game.js`、`wrangler.toml`、`package.json` 保持原状，包内同时带了一份供检查。GitHub 上传时必须保留 server 文件夹。
 
-打开 https://github.com/new ：
-- Owner 选择 `KileMoran`
-- Repository name 填 `chuiniubi`
-- 选 Public（用于 GitHub Pages）
-- **不要**勾选 Add a README file / .gitignore / License，保持空仓库，点击 Create repository
+在 GitHub 的 `main` 分支提交更改后，GitHub Pages / Cloudflare Builds 会依各自原有自动部署配置更新。不要把 ZIP 直接上传到仓库指望 GitHub 自动解压。
 
-接着点击空仓库页面上的 **uploading an existing file**（或以后使用 **Add file → Upload files**），上传本文件夹里的 `index.html`、`package.json`、`wrangler.toml` 和 `server/game.js`、`server/worker.js`，确保 `server/` 目录层级保留。网页上传时可以直接拖动整个文件夹或选择解压后的文件（不同浏览器对目录拖动支持不同）；确认上传页面展示正确的相对路径再 Commit changes。
+检查 Cloudflare Worker 的版本：
+https://my-chuiniubi-room.syc050609.workers.dev/health
+新版本应该显示 `"version":"1.1-voice"`。如果仍然是 `1.0`，先检查 Cloudflare Deployments 是否成功部署本次提交。
 
-**不能直接上传 ZIP 并期望 GitHub 自动解压。** 推荐先解压 ZIP。
+## 第二部分：启用 Cloudflare RealtimeKit 语音
 
-### 2. 用 GitHub Pages 发布网页
+这一步必须在你的 Cloudflare 账户操作，我无法为你创建账户里的 RealtimeKit App，也不能获知你的密钥。
 
-仓库页面 → Settings → Pages → Build and deployment → Deploy from a branch → `main` / `/(root)` → Save。
+1. 登录 Cloudflare Dashboard，在左侧 `Realtime` 下进入 `RealtimeKit`，创建一个 App。
+2. 在该 App 的 Presets 中新建一个名为 `voice_game` 的语音预设，类型务必选择 **Voice / Audio Room（纯音频）**，允许成员 **发送音频、接收音频**，不使用视频、录制、转写或等候室。
+3. 创建一个 Cloudflare API Token，仅授予此集成所需的 `Realtime / Realtime Admin` 权限（尽量限制到当前账户）。**不要**把 Token 写在 HTML、GitHub、公开的 README、聊天或截图里。
+4. 到 `Workers & Pages → my-chuiniubi-room → Settings → Variables and Secrets`，添加：
 
-部署后预计网页地址为：`https://kilemoran.github.io/chuiniubi/`。
+| 名称 | 值 | 类型 |
+|---|---|---|
+| `CF_RTK_ACCOUNT_ID` | Cloudflare 账户 ID | 文本/Secret 均可 |
+| `CF_RTK_APP_ID` | RealtimeKit 应用 ID | 文本/Secret 均可 |
+| `CF_RTK_PRESET` | `voice_game`（必须等于真实存在的预设名称） | 文本 |
+| `CF_RTK_API_TOKEN` | 你刚创建的 Cloudflare Realtime API Token | **Secret**（不可公开） |
 
-### 3. 在 Cloudflare 建立新 Worker（无需本机安装 Node.js）
+保存配置后，如果需要，重新部署 Worker。无需更换游戏的网址和房间号。
 
-Cloudflare Dashboard → Workers & Pages → Create application → GitHub（或 Import a repository）→ 选择 `KileMoran/chuiniubi`。
+官方接入指南：
+- https://developers.cloudflare.com/realtime/realtimekit/quickstart/
+- https://developers.cloudflare.com/realtime/realtimekit/concepts/preset/
+- https://developers.cloudflare.com/realtime/realtimekit/audio-calls/
+- https://developers.cloudflare.com/api/resources/realtime_kit/subresources/meetings/methods/add_participant/
 
-按以下参数确认：
-- **Worker 名称：** `my-chuiniubi-room`（必须与 `wrangler.toml` 中的 `name` 完全一致）
-- **Production branch：** `main`
-- **Root directory：** 留空（仓库根目录）
-- **Build command：** 留空（本项目无构建步骤）
-- **Deploy command：** `npx wrangler deploy`（默认即可）
+## 第三部分：首次联机语音测试
 
-点击 **Save and Deploy**。Cloudflare 会在云端安装依赖、部署 Worker，并根据 `wrangler.toml` 创建 Durable Object。此时 Cloudflare 与 GitHub 建立自动部署关联，之后提交到 main 可触发新的部署。
+1. 两个不同设备/浏览器加入同一游戏房间。
+2. 点击“加入语音”（可以在等待大厅或游戏页面点击）。
+3. 加入成功后麦克风默认关闭，玩家自行点击“开启麦克风”，允许浏览器使用麦克风。
+4. 一方说话，另一方应该能听见；若 Safari 拦截自动音频播放，可点“点击播放声音”。
+5. 点击“好友音量设置”可单独调整其他用户的音量，点击“退出语音”仅停止语音，不退出游戏。
+6. 用手机旋转横屏，布局自动切换为左牌桌、右控制区。手机浏览器不保证可以通过网页强制锁定方向，请手动关闭设备的竖屏锁定。
 
-如果 Cloudflare 提示缺少 Worker 名称、Durable Objects 绑定、账单配置或 GitHub 仓库权限，请根据具体错误处理；不要选择原来斗地主的 Worker。
-
-### 4. 检查联机地址
-
-如果仍在之前的 Cloudflare 账号与 `syc050609.workers.dev` 子域名下，游戏已预设服务器地址：
-
-`wss://my-chuiniubi-room.syc050609.workers.dev`
-
-部署后在浏览器访问：`https://my-chuiniubi-room.syc050609.workers.dev/health`。
-正常应返回含 `"ok":true` 的 JSON。如果 Cloudflare 控制台实际地址不同，在游戏首页的「高级设置」里填写实际地址（`wss://...workers.dev`）。
-
-**预设地址目前不代表已成功部署。**
-
-## 二、4 人首次测试
-
-1. 房主打开游戏首页，填写昵称，房间总人数选择 4，点击「创建新房间」。
-2. 把邀请链接发给另外三名朋友，让他们分别在不同浏览器/设备打开并加入。
-3. 房主看到 4 人齐全、全部在线之后再开始。
-4. 检查各玩家只看到自己的手牌；出牌后全场同步；质疑后才亮出牌；本轮所有其他玩家跳过则暗牌弃置。
-
-## 三、注意事项
-
-- Cloudflare Worker 与 GitHub Pages 分别部署；只发布网页，房间无法连接。
-- `wrangler.toml` 中 Worker 名必须与 Cloudflare 控制台 Worker 名一致。
-- 因账号不同，Worker 的实际子域名可能与预设值不一致。
-- 不要把原来的 `my-doudizhu-room` Worker 改名或覆盖。
-- 服务器隐藏其他玩家的手牌并校验出牌。房间号不是密码，不适合陌生人隐私社交。
-- 游戏中玩家断线会暂停该人的回合等待重连；当前没有自动托管和踢人功能。
-
-## 四、项目结构
-
-```
-index.html         # 游戏客户端（宿舍场景、样式、头像、脚本内置）
-package.json       # Cloudflare 云端构建依赖
-wrangler.toml      # Worker 和 Durable Objects 配置
-server/
-  game.js          # 服务器规则引擎
-  worker.js        # WebSocket 房间服务
-```
-
-游戏规则逻辑本地已经通过单元测试，但上线后的多设备联机仍需实际验证。
-
-官方文档：
-- https://developers.cloudflare.com/workers/ci-cd/builds/
-- https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
-- https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site
+## 注意事项与测试范围
+- 我已做 HTML/JS 语法检查、6 项原有游戏规则测试、模拟 Worker 发令牌与缓存测试、假 SDK 按钮/静音行为测试和几种手机尺寸的无报错渲染测试。
+- **还未**使用你的真实 RealtimeKit App、实际 API Token、两台真实设备验证通话。部署配置完成后才可以做线上验证。
+- 如果未配置四项变量，游戏仍可正常进行；点击语音按钮时只会显示语音不可用提示。
+- 单台设备多个页面重复登录可能使旧页面的身份连接失效；建议每名玩家独立浏览器与设备测试。
+- RealtimeKit 使用独立媒体流，音频不通过现有游戏 WebSocket 传输。
