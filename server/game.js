@@ -1,12 +1,15 @@
 // 吹牛逼 · server-authoritative game logic. Never import this file in the browser.
 export const RANKS = ['2','A','K','Q','J','10','9','8','7','6','5','4','3'];
+export const ROOM_OFFLINE_TTL_MS=2*60*60*1000; // Two hours after the final player disconnects.
+export function roomOfflineDeadline(g){return Number.isFinite(g?.offlineSince)?g.offlineSince+ROOM_OFFLINE_TTL_MS:null;}
+export function isRoomExpired(g,now=Date.now()){const deadline=roomOfflineDeadline(g);return deadline!==null&&now>=deadline;}
 const SUITS=['♠','♥','♣','♦'];
 // 1–2 玩家：一副（52张）；3玩家：四副（208张）；4–6玩家：沿用两副（104张）。
 export function deckCountForCapacity(capacity){return capacity<=2?1:capacity===3?4:2;}
 export function expectedCardCount(capacity){return 52*deckCountForCapacity(capacity);}
 export function err(condition,message){if(!condition)throw new Error(message);}
 export function freshGame(room='',capacity=5){return {
- room,capacity,players:[],host:null,phase:'lobby',phaseUntil:0,round:0,rank:null,turn:null,
+ room,capacity,offlineSince:null,lastSeenAt:Date.now(),players:[],host:null,phase:'lobby',phaseUntil:0,round:0,rank:null,turn:null,
  last:null,pile:[],discard:[],passes:0,moveId:0,cardSlot:0,winner:null,result:null,
  starter:null,eventId:0,event:{type:'lobby',text:'等待玩家加入'},stats:{caught:0,failed:0}
 };}
@@ -58,8 +61,16 @@ export function resolveAccuse(g){
  const challenger=g.result.challenger;const receiver=lied?move.player:challenger;const starter=lied?challenger:move.player;
  g.result={...g.result,lied,receiver,starter,won:(!lied&&g.players[move.player].hand.length===0)?move.player:null};
  if(lied)g.stats.caught++;else g.stats.failed++;
- g.phase='reveal';g.phaseUntil=Date.now()+3000;
- event(g,'reveal',{player:challenger,text:lied?'抓到假牌！':'质疑失败！',lied,receiver});
+ // First stage: the challenged last play is revealed, while older pile cards remain secret.
+ g.phase='reveal_last';g.phaseUntil=Date.now()+2900;
+ event(g,'reveal_last',{player:challenger,text:lied?'抓到假牌！':'质疑失败！',lied,receiver});
+}
+export function revealRemaining(g){
+ err(g.phase==='reveal_last','状态错误');
+ // Give time to inspect each card in a 4-deck match; the client has a scrollable gallery.
+ const duration=Math.max(6500,Math.min(16500,5000+Math.ceil(g.pile.length/15)*850));
+ g.phase='reveal';g.phaseUntil=Date.now()+duration;
+ event(g,'reveal_all',{count:g.pile.length,text:`公开本轮全部${g.pile.length}张暗牌`});
 }
 export function startCollect(g){err(g.phase==='reveal','状态错误');g.phase='collecting';g.phaseUntil=Date.now()+700;event(g,'collecting',{receiver:g.result.receiver,count:g.pile.length,text:`收走本轮${g.pile.length}张牌`});}
 export function completeCollect(g){
@@ -80,15 +91,16 @@ export function finishDiscard(g){err(g.phase==='discarding','状态错误');cons
 export function newRound(g,starter){g.phase='playing';g.phaseUntil=0;g.turn=starter;g.rank=null;g.last=null;g.passes=0;g.result=null;g.round++;event(g,'round',{player:starter,text:`第${g.round}轮，${g.players[starter].name}先出牌`});}
 export function tick(g){
  if(!g.phaseUntil||Date.now()<g.phaseUntil)return false;
- switch(g.phase){case 'choosing':beginTurn(g);return true;case 'cooldown':finishCooldown(g);return true;case 'accusing':resolveAccuse(g);return true;case 'reveal':startCollect(g);return true;case 'collecting':completeCollect(g);return true;case 'discarding':finishDiscard(g);return true;default:return false;}
+ switch(g.phase){case 'choosing':beginTurn(g);return true;case 'cooldown':finishCooldown(g);return true;case 'accusing':resolveAccuse(g);return true;case 'reveal_last':revealRemaining(g);return true;case 'reveal':startCollect(g);return true;case 'collecting':completeCollect(g);return true;case 'discarding':finishDiscard(g);return true;default:return false;}
 }
 export function totalCards(g){return g.players.reduce((n,p)=>n+p.hand.length,0)+g.pile.length+g.discard.length;}
 export function publicState(g,id,onlineIds=[]){
- const reveal=['reveal','collecting'].includes(g.phase);const index=playerIndex(g,id);
+ const revealAll=['reveal','collecting'].includes(g.phase);
+ const revealLast=g.phase==='reveal_last';const index=playerIndex(g,id);
  return {room:g.room,capacity:g.capacity,host:playerIndex(g,g.host),me:index,players:g.players.map(p=>({id:`seat-${p.seat}`,name:p.name,seat:p.seat,count:p.hand.length,online:onlineIds.includes(p.id),host:p.id===g.host})),
  phase:g.phase,phaseUntil:g.phaseUntil,serverNow:Date.now(),round:g.round,rank:g.rank,deckCount:deckCountForCapacity(g.capacity),turn:g.turn,starter:g.phase==='choosing'?null:g.starter,
  last:g.last?{...g.last}:null,passes:g.passes,discardCount:g.discard.length,
- pile:g.pile.map(p=>({slot:p.slot,owner:p.owner,moveId:p.moveId,...(reveal?{card:p.card}: {})})),
- hand:index>=0?g.players[index].hand:[],winner:g.winner,result:reveal?g.result:null,
+ pile:g.pile.map(p=>({slot:p.slot,owner:p.owner,moveId:p.moveId,...((revealAll||(revealLast&&p.moveId===g.last?.moveId))?{card:p.card}: {})})),
+ hand:index>=0?g.players[index].hand:[],winner:g.winner,result:(revealAll||revealLast)?g.result:null,
  event:g.event,stats:g.stats,onlineCount:onlineIds.length};
 }
