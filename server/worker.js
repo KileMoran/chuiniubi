@@ -14,7 +14,7 @@ async function realtimeApi(env,uri,method='POST',body){
 
 export default {
  async fetch(request,env){const url=new URL(request.url);
-  if(url.pathname==='/health')return Response.json({ok:true,service:'吹牛逼·联机服务器',version:'1.1-voice',gameplay:'v7.7.2',roomIdlePolicy:'2h-offline'});
+  if(url.pathname==='/health')return Response.json({ok:true,service:'吹牛逼·联机服务器',version:'1.1-voice',gameplay:'v7.7.3',roomIdlePolicy:'2h-offline'});
   if(url.pathname!=='/ws')return new Response('Use /health or /ws',{status:404});
   if(request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return new Response('WebSocket required',{status:426});
   const room=url.searchParams.get('room')?.toUpperCase();

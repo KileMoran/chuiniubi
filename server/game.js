@@ -67,8 +67,9 @@ export function resolveAccuse(g){
 }
 export function revealRemaining(g){
  err(g.phase==='reveal_last','状态错误');
- // Give time to inspect each card in a 4-deck match; the client has a scrollable gallery.
- const duration=Math.max(6500,Math.min(16500,5000+Math.ceil(g.pile.length/15)*850));
+ // Players inspect real cards on the tabletop. Large 4-deck piles may need several
+ // pages on a phone; grant enough time without creating an indefinite game pause.
+ const duration=Math.max(9000,Math.min(45000,6500+Math.ceil(g.pile.length/18)*2800));
  g.phase='reveal';g.phaseUntil=Date.now()+duration;
  event(g,'reveal_all',{count:g.pile.length,text:`公开本轮全部${g.pile.length}张暗牌`});
 }
