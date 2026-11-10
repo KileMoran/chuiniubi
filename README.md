@@ -1,6 +1,8 @@
 > **最新更新 V7.7.3（2026-11-07）**：质疑后不再出现翻牌画廊，直接在纸箱桌面先翻上一手判定真假、再摊开其他所有牌；大牌堆可在桌面左右翻页，所有牌面均独立清楚显示。A 只标为 A。详见 `CHANGELOG.md`。
 
-> **V7.7.1 最新补丁：** 所有玩家离线超过 2 小时自动关闭旧房间；下次访问默认主菜单。短时间掉线仍可恢复；在线房间保持不变。
+> **V7.7.1 房间管理补丁：** 所有玩家离线超过 2 小时自动关闭旧房间；下次访问默认主菜单。短时间掉线仍可恢复；在线房间保持不变。
+
+> **跨国联机说明（2026-11-10 更新）：** 英国玩家可以使用主站；中国大陆玩家可尝试 [Cloudflare Pages 备用入口](https://chuiniubi-relay.pages.dev/)，经 `GAME` Service Binding 接入**同一个**游戏 Worker 和房间。备用入口当前是启动页，仍依赖 GitHub Pages 加载游戏界面，且**不保证**中国大陆网络下的网页、WebSocket 或语音可用性。完整步骤见 [第 15 节](#15--中国大陆与海外跨境联机)。
 
 <div align="center">
 
@@ -12,7 +14,7 @@
 
 **当前网页版本：V7.7.3 · 牌桌直接翻牌、A 只显示 A** ｜ **玩家人数：1–6 人** ｜ **平台：电脑 / 手机 / 平板**
 
-[🎮 立即进入游戏](https://kilemoran.github.io/chuiniubi/) · [📦 项目源码](https://github.com/KileMoran/chuiniubi) · [🩺 联机服务器状态](https://my-chuiniubi-room.syc050609.workers.dev/health)
+[🎮 立即进入游戏](https://kilemoran.github.io/chuiniubi/) · [🌏 中国大陆备用入口](https://chuiniubi-relay.pages.dev/) · [📦 项目源码](https://github.com/KileMoran/chuiniubi) · [🩺 联机服务器状态](https://my-chuiniubi-room.syc050609.workers.dev/health)
 
 **制作与维护：KyleMoran**  
 *GitHub 仓库账号为 `KileMoran`，与游戏内作者署名 `KyleMoran` 的拼写不同，以现有仓库链接为准。*
@@ -65,7 +67,7 @@
 | 当前 Worker 健康检查版本 | `1.1-voice`（独立于网页版本） |
 | `package.json` 版本 | `1.0.0`（工具包版本，不是网页迭代号） |
 | 玩家数量 | 1–6 人；1 人为单人练习模式 |
-| 游戏牌组 | 1–2 人：52 张；3 人：208 张；4–6 人：104 张；**无大小王** |
+| 游戏牌组 | 1–2 人：1 副（52 张）；3–6 人：2 副（104 张）；**无大小王** |
 | 操作设备 | 支持桌面浏览器、手机和平板；触屏可用 |
 | 游戏前端 | 单文件 `index.html`，HTML / CSS / JavaScript |
 | 游戏后端 | Cloudflare Workers + Durable Objects |
@@ -89,7 +91,7 @@
 | 功能 | 具体表现 |
 | --- | --- |
 | 🎲 随机起手 | 游戏开始后以简短动画随机选择第一位出牌者 |
-| 🃏 按人数配牌 | 1–2 人 1 副、3 人 4 副、4–6 人 2 副，尽量均匀发放 |
+| 🃏 按人数配牌 | 1–2 人 1 副、3–6 人 2 副，尽量均匀发放 |
 | 🎯 新回合手动宣称 | 每轮首手必须点击点数（3～10、J、Q、K、A、2），选牌后才能出牌 |
 | 🧍 单人练习 | 单人出牌后自动弃置本手牌并开启新回合，不需要 AI 对手 |
 | 🤥 虚报点数 | 实际出的牌可以与宣称点数不同，其他人看不到盖牌内容 |
@@ -136,7 +138,7 @@
 
 ### 4.1 牌组与牌点顺序
 
-每副标准扑克牌为 **52 张**，包含 13 种点数和 4 种花色，没有 Joker/大小王。**1–2 人用 1 副（52 张），3 人用 4 副（208 张），4–6 人沿用 2 副（104 张）。**
+每副标准扑克牌为 **52 张**，包含 13 种点数和 4 种花色，没有 Joker/大小王。**1–2 人用 1 副（52 张），3–6 人用 2 副（104 张）。**
 
 当前界面的手牌排序遵循：
 
@@ -313,11 +315,18 @@ flowchart LR
 - **Durable Object (`GameRoom`)** 让同一房间的玩家共享权威的游戏状态，负责发牌、验证出牌与质疑、阶段计时、同步状态、恢复。
 - **RealtimeKit** 按游戏房间建立独立的语音会议，通过后端授权返回给玩家单独的加入凭证。
 
-### 9.2 为什么不能只靠 GitHub Pages 直接联机？
+### 9.2 英国与中国大陆玩家如何进入同一房间？
+
+- **英国/海外入口：** 浏览器加载 `https://kilemoran.github.io/chuiniubi/`，默认用 `wss://my-chuiniubi-room.syc050609.workers.dev/ws` 建立游戏 WebSocket。
+- **中国大陆备用入口：** 打开 `https://chuiniubi-relay.pages.dev/`，由备用启动页跳转到 GitHub Pages 游戏网页，同时附带 `server=wss://chuiniubi-relay.pages.dev` 参数。游戏网页于是改经 Pages Functions 的 `/ws` 接入。
+- **统一后端：** Pages Function 使用 `env.GAME.fetch(...)` 通过 **Service Binding `GAME → my-chuiniubi-room`** 转发握手；两条线路最终使用同一个 Worker、同一个 Durable Object `GameRoom`，并非两套牌局。完整配置和检查步骤见 [第 15 节](#15--中国大陆与海外跨境联机)。
+- **注意：** 当前 Pages 备用入口是**启动页 / 联机中转**，不是 GitHub Pages 整套游戏前端的镜像。它不能保证解决 `github.io` 网页本身无法打开的问题；RealtimeKit 的 WebRTC 语音也不经过 `GAME` 中转。
+
+### 9.3 为什么不能只靠 GitHub Pages 直接联机？
 
 GitHub Pages 托管静态内容，不能持续保存并同步多名玩家的即时房间状态；本项目由 Cloudflare Worker / Durable Object 充当游戏服务器。**仅上传 `index.html` 到 GitHub，不会自动拥有可用的多人服务器。**
 
-### 9.3 为什么作弊不应只交给前端判断？
+### 9.4 为什么作弊不应只交给前端判断？
 
 - 实际牌堆、所有玩家原始手牌与游戏阶段保存在服务器。
 - 浏览器收到的是每位玩家能看到的**公开状态**和**自己的手牌**。
@@ -338,6 +347,8 @@ chuiniubi/
     ├── worker.js        # /health、/ws、GameRoom 与语音令牌管理
     └── game.js          # 服务端规则、洗牌、回合、质疑与公开状态
 ```
+
+**跨境辅助仓库：** [`KileMoran/chuiniubi-relay`](https://github.com/KileMoran/chuiniubi-relay) 独立包含 `functions/health.js`、`functions/ws.js`、`functions/echo.js`、`public/index.html` 和 `public/_routes.json`；它不是主游戏的第二套服务端。
 
 **注意：** `index.html` 集成了游戏场景和部分资源，不代表所有依赖都能离线运行：语音 SDK 在玩家加入语音时仍会从外部 CDN 加载。`package.json` 提供了测试脚本，但如果仓库没有同时上传 `tests/` 目录，本地执行 `npm test` 可能因为找不到测试文件而失败。
 
@@ -439,6 +450,21 @@ npm run deploy
 
 **普通朋友游玩不需要以上命令。** 即使本地启动 Worker，也应使用适合当前环境的测试地址与独立的调试房间，避免误连正式对局。
 
+### 11.7 Cloudflare Pages 中国大陆备用入口（独立仓库）
+
+目前使用的备用入口为 **https://chuiniubi-relay.pages.dev/**，源码在 [`KileMoran/chuiniubi-relay`](https://github.com/KileMoran/chuiniubi-relay)。它只增加一个 HTTP 健康检查和 WebSocket 接入路径，不需要再创建游戏 Worker 或 Durable Object。
+
+1. 在 Cloudflare **Workers & Pages** 中创建或连接一个 **Pages** 项目，Git 仓库选择 `KileMoran/chuiniubi-relay`，生产分支 `main`。使用 `public` 作为 Build output directory（仓库根目录作为 Root directory）；无需编译前端。Pages Functions 通过仓库根目录的 `functions/` 部署。
+2. 进入 **Pages 项目**的 Settings → Bindings，增加 **Service binding**：变量名必须为 `GAME`，目标服务选择已经运行的 `my-chuiniubi-room`。这是 Pages 项目的绑定，**不是**给原 Worker 增加第二套 `ROOMS`。
+3. 保存绑定后**重新部署 Pages**，让新绑定进入运行环境。不要只保存设置就认为已生效。
+4. 访问 `https://chuiniubi-relay.pages.dev/health`：应由原游戏 Worker 返回包含 `ok: true` 的 JSON。打开备用首页可分别点击 **检测 HTTP** 和 **检测 WSS**；WSS 按钮测试独立 `/echo`，不能单凭 `/echo` 成功就断言 `/ws` 已可创建房间。
+5. 最终让中国大陆玩家通过备用入口进入一个**真实房间**，并让海外玩家从主站直连，用同一个房间号测试创建、进入、出牌、质疑和重连。
+
+当前 `public/_routes.json` 仅将 `/health`、`/ws`、`/echo` 交给 Pages Functions，其他路径仍是静态页面。**直接上传 ZIP 到 Pages 的静态资源区域不能替代 Git 集成部署 Functions。** 如变更 Pages 域名，需要同时更新使用该地址的启动页或手动设置服务器 URL。
+
+> [!IMPORTANT]
+> 游戏 Worker 更新不需要复制、迁移或重建 Pages 的 `GAME` 绑定。游戏源代码部署时应保留 `wrangler.toml` 的 `keep_vars = true`，并检查四项 `CF_RTK_*` 语音运行时绑定及 `ROOMS`。本步骤不涉及上传任何 API Token 到 GitHub 或 Pages。
+
 ## 12 · RealtimeKit 语音配置教程
 
 ### 12.1 新建应用和语音预设
@@ -489,6 +515,12 @@ npm run deploy
 
 WebRTC 专为低延迟媒体通信而设计；Worker 保留房间成员身份校验与语音令牌颁发，RealtimeKit 负责实际音频连接。这样游戏状态与语音媒体不会互相阻塞。
 
+### 12.6 跨国语音与游戏数据不是同一条线路
+
+游戏 WebSocket 可使用 `wss://chuiniubi-relay.pages.dev/ws` 中转，但语音仍在玩家浏览器中加载 `https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit@2.0.4/dist/browser.js`，并单独使用 RealtimeKit / WebRTC 建立媒体连接。**`GAME` Service Binding 不转发音频，也不会绕过媒体网络的区域或运营商限制。**
+
+排查时应依次确认：Pages HTTP → Pages WSS → 两端实际出牌同步 → 浏览器 SDK 是否加载 → 麦克风权限和双向音频。游戏能玩但语音失败时，不要重建房间或修改游戏牌堆；先查看媒体相关错误。
+
 ## 13 · 运行接口与技术细节
 
 ### 13.1 当前服务端 HTTP 路径
@@ -517,7 +549,7 @@ WebRTC 专为低延迟媒体通信而设计；Worker 保留房间成员身份校
 
 适合开发时验证的事项：
 
-- 洗牌后总牌数按房间人数守恒：1–2 人 52、3 人 208、4–6 人 104。
+- 洗牌后总牌数按房间人数守恒：1–2 人 52、3–6 人 104。
 - 不允许打出不属于自己的牌或重复选中同一张牌。
 - 超过 8 张牌的出牌请求应被拒绝。
 - 质疑只检查最新一手，收牌对象符合规则。
@@ -563,30 +595,100 @@ GitHub 与 Cloudflare 可能依据自己的平台规则采取措施。若未来�
 
 ## 15 · 中国大陆与海外跨境联机
 
-项目页面、游戏同步和语音走的是**三条不同链路**，因此“网页能打开”与“能稳定联机/语音”必须分别判断。
+本项目目前提供两个**接入入口、一个游戏服务器**：英国及其他海外玩家通常走主站直连，中国大陆玩家可以尝试 Pages 备用入口。不同国家玩家在**同一个六位房间号**下仍使用同一个 Durable Object 房间，玩家座位、手牌、质疑判定与游戏状态不会分裂到两台服务器。
 
-| 链路 | 当前服务 | 可能的问题 | 优先验证 |
-| --- | --- | --- | --- |
-| 网页静态资源 | `kilemoran.github.io` / GitHub Pages | 不同地区可能加载缓慢、超时或无法打开 | 能否看到首页及背景 |
-| 游戏房间 | `my-chuiniubi-room.syc050609.workers.dev` / WebSocket | 跨境延迟、偶发断开、握手失败 | `/health` 能否打开、创建加入房间与出牌是否同步 |
-| 实时语音 | Cloudflare RealtimeKit / WebRTC + 外部 SDK CDN | SDK 加载失败、麦克风权限、媒体网络不通、延迟/卡顿 | 进入语音、双向说话是否正常 |
+**重要限制：** 跨境网络可达性取决于当地运营商、浏览器和 Cloudflare/GitHub 的实时服务情况。备用入口是可测试的中转方案，**不是保证中国大陆可用的线路，不是网络加速器或翻墙服务**。游戏画面、WebSocket 和 RealtimeKit 语音需要分别验证。
 
-Cloudflare 官方明确指出，面向中国大陆的跨境网络流量可能有更高延迟和更低可靠性；其 Realtime TURN 服务也不会在中国大陆 Cloudflare China Network 内运行。GitHub Pages 的 `github.io` 在不同中国大陆网络环境下也不保证一致可达。**本项目并未承诺中国大陆境内的低延迟或稳定语音服务**。
+### 15.1 当前三个入口与各自作用
 
-### 建议让国内朋友按顺序测试
+| 地址 | 作用 | 适合谁 |
+| --- | --- | --- |
+| [游戏主站](https://kilemoran.github.io/chuiniubi/) — `https://kilemoran.github.io/chuiniubi/` | 实际游戏前端，默认通过 `workers.dev` 连接服务器 | 英国、海外或可直连的玩家 |
+| [中国备用启动页](https://chuiniubi-relay.pages.dev/) — `https://chuiniubi-relay.pages.dev/` | 检测中转是否可用，并带 `server` 参数跳转主游戏前端 | 中国大陆无法直连默认 Worker 的玩家，可先尝试 |
+| [原 Worker 健康检查](https://my-chuiniubi-room.syc050609.workers.dev/health) — `/health` | 测试 Worker 的 HTTP 服务是否响应 | 技术排查；它不等同于 WebSocket 或语音成功 |
 
-1. **先验证首页**：直接访问游戏网址，看是否能完整显示。
-2. **再验证服务器**：单独打开 `https://my-chuiniubi-room.syc050609.workers.dev/health`，确认接口能响应。
-3. **再验证 WebSocket**：使用另一台设备创建/加入一个测试房间；留意“在线”状态是否持续。
-4. **再验证游戏**：至少玩几轮，观察出牌动画、质疑回应与断线恢复。
-5. **最后验证语音**：双方佩戴耳机，测试静音、双向声音和持续稳定性。
-6. **交叉网络测试**：可以分别尝试家用宽带、移动数据和不同运营商；记录发生问题的环节。
+备用入口自己的 HTTP 检查是 **https://chuiniubi-relay.pages.dev/health**。Pages 首页还提供 `/echo` 的 WebSocket 测试按钮，用来检查浏览器到 Pages 的基本 WSS 通信能力。
 
-**特别提醒：** 游戏有约 2 秒的出牌间隔，跨境延迟或连接抖动会影响抢质疑的操作时机。即使网页加载正常，网络延迟也可能改变实际手感。
+### 15.2 英国与中国大陆朋友进入同一房间（实际操作）
 
-如果只是朋友之间小规模游玩，优先实测现有部署，不必急于换服务器；如果目标变为长期服务大量中国大陆玩家，再单独评估更稳定的托管位置、合法域名/备案要求和专用网络方案，不应简单推断境外自建页面在中国大陆一定能稳定访问。
+1. **英国房主**打开 [游戏主站](https://kilemoran.github.io/chuiniubi/)，输入昵称、选择人数并创建房间，记下六位房间号。房主可直接使用默认服务器地址。
+2. **中国大陆朋友**先打开 [备用入口](https://chuiniubi-relay.pages.dev/)，点击 **检测 HTTP** 和 **检测 WSS**。两项都通过后，在备用页填写房主的六位房间号并点击 **通过备用线路进入游戏**。
+3. 备用启动页会跳转到 GitHub Pages 的游戏界面，并附加类似 `?server=wss%3A%2F%2Fchuiniubi-relay.pages.dev&room=ABC123` 的参数。这里的 `ABC123` 只是格式示例，不是实际房间。
+4. 中国大陆玩家确认**高级服务器设置**使用 `wss://chuiniubi-relay.pages.dev`，填写昵称，加入**同一个**房间号。海外玩家仍可继续使用默认的 `wss://my-chuiniubi-room.syc050609.workers.dev`。
+5. 等所有玩家显示在线，房主开始游戏。至少做一次出牌、跟牌、质疑和重连测试，确认同一房间成员在不同国家能实时看到一致状态。
+
+> [!TIP]
+> **不要直接把海外玩家复制的默认邀请链接当成“中国备用线路”链接。** 它可能仍指向 `workers.dev`，导致国内朋友打不开房间。对国内朋友建议发送**备用入口网址 + 六位房间号**。如果已在游戏高级设置填写了备用 WSS 地址，主游戏的邀请链接可能含 `server` 参数，也应检查地址是否正确。
+
+### 15.3 备用入口如何接入原房间？
+
+```text
+英国/海外玩家                              中国大陆玩家
+      │                                         │
+      ▼                                         ▼
+GitHub Pages 游戏主站                  Cloudflare Pages 备用启动页
+      │                                         │
+      │                            跳转到 GitHub Pages 游戏主站
+      │                              并附带 ?server=...pages.dev
+      │                                         │
+      ▼                                         ▼
+原 Worker 的 /ws (WSS)               Pages Functions 的 /ws (WSS)
+      │                                         │
+      │                           Service Binding: GAME.fetch()
+      │                                         │
+      └──────────────┬──────────────────────────┘
+                     ▼
+           my-chuiniubi-room Worker
+                     ▼
+          ROOMS Durable Object GameRoom
+                 同一房间/同一牌局
+```
+
+Pages Function `functions/ws.js` 保留 `room`、`token` 等原始查询参数，通过 **`env.GAME.fetch()`** 转发 WebSocket 握手；并不再通过公共 `workers.dev` 域名转发一次。项目仓库：[`KileMoran/chuiniubi-relay`](https://github.com/KileMoran/chuiniubi-relay)。
+
+**特别注意：备用入口目前不托管游戏的整套 `index.html`。** 玩家点击「通过备用线路进入游戏」后，仍然需要其浏览器能够加载 `kilemoran.github.io`。如果 GitHub Pages 本身在该网络不可用，即使 Pages 的 HTTP/WSS 检测均正常，也可能无法进入完整游戏。若今后要完全摆脱这项依赖，需要**另行部署或镜像完整游戏前端**，而不是只修改 WSS 地址。
+
+### 15.4 按顺序诊断：网页、HTTP、WebSocket、房间、语音
+
+| 测试阶段 | 具体方法 | 能说明什么 / 不能说明什么 |
+| --- | --- | --- |
+| ① 网页访问 | 浏览器访问 `https://chuiniubi-relay.pages.dev/` 和游戏主站 | 只能确认静态网页是否可加载；两者都应检查 |
+| ② Pages HTTP | 打开 `https://chuiniubi-relay.pages.dev/health`，检查 `ok: true` | 确认 Pages 的 `GAME` Service Binding 可调用 Worker；**不保证 WSS** |
+| ③ Pages WSS | 备用首页点击 **检测 WSS**，实际测试 `/echo` 的 `ping/pong` | 确认 Pages WebSocket 基本可用；**不代表游戏 `/ws` 已可用** |
+| ④ 游戏 WSS | 在备用线路加入与海外玩家相同的房间，观察在线、回合、出牌与质疑 | 验证真实 `/ws` 与同房间同步 |
+| ⑤ 语音 | 双方主动加入语音、允许麦克风、开麦并互相听音 | 单独验证 RealtimeKit SDK/CDN 和 WebRTC 媒体链路 |
+| ⑥ 稳定性 | 互换网络、玩多轮、短断线后恢复 | 观察延迟、丢线与恢复；一次成功不能证明长期稳定 |
+
+**`/health` 200 不代表语音可用。** RealtimeKit 的音频并不通过 Pages 的 `/ws` 中转，且浏览器需要从外部 CDN 加载语音 SDK。国内运营商、Wi-Fi/移动数据环境不同，联机与语音表现可能不同。
+
+### 15.5 常见跨境故障与对策
+
+| 现象 | 优先检查 |
+| --- | --- |
+| Pages 首页打不开 | 当前网络对 `pages.dev` 不可达；可尝试切换 Wi-Fi/移动数据，或在满足当地规则的前提下评估独立域名/其他托管，不保证一定改善 |
+| Pages 能打开、游戏主页打不开 | **备用页仍要跳转 GitHub Pages**；需要先解决游戏前端的可达性，单修 `GAME` 无法解决 |
+| `/health` 为 503，含 `GAME_SERVICE_BINDING_MISSING` | Pages 项目 Settings → Bindings 下确认 `GAME → my-chuiniubi-room`，保存后重新部署 Pages |
+| `/health` 为 404 | 检查 `functions/health.js` 和 `public/_routes.json` 是否按 Git 仓库结构部署到 Pages；不要直接把 ZIP 当静态资源上传 |
+| `/echo` 失败 | 浏览器与 Pages 的 WebSocket 连接失败；先检查浏览器及当地网络，再测不同运营商 |
+| HTTP/WSS 测试正常，却不能加入房间 | 确认客户端高级设置是 `wss://chuiniubi-relay.pages.dev`、房间号正确、房间未开始或未满；检查 Worker/DO 部署与实际 `/ws` 握手 |
+| 英国与国内玩家出现在不同房间 | 检查是否误连到另一个 Worker 或另一 Cloudflare 账户的 `ROOMS`；Pages `GAME` 必须指向**原来的** Worker |
+| 牌能打但语音不通 | 先检查外部 CDN、RealtimeKit 配置、浏览器麦克风授权以及 WebRTC 网络，不要把游戏中转当作语音中转 |
+| 掉线重连后座位恢复失败 | 继续使用原浏览器、原网站与保留的本地玩家凭证；不要随意清空站点数据。所有人离线超过 2 小时后房间可能自动关闭 |
+
+**保护玩家身份：** 原游戏采用每个房间的随机玩家 Token 识别座位，`/ws?room=...&token=...` 中的 Token 不应公开；报错截图或日志应移除完整 WebSocket URL、个人身份信息和 API 密钥。备用 Pages 也不是通用 HTTP 代理，它仅开放游戏相关的 `/health`、`/ws` 和诊断用 `/echo`。
+
+### 15.6 跨国部署与更新注意事项
+
+- **前端更新：** 提交主仓库 `index.html` 后需要等待 GitHub Pages 发布；备用启动页跳转的是主站，因此前端版本仍由主站决定。
+- **游戏逻辑更新：** 修改 `server/game.js` 或 `server/worker.js` 需要重新部署**原 Worker**。不要为中国玩家另外部署同名或独立游戏服务器，否则房间可能不互通。
+- **Pages 中转更新：** 修改独立仓库 `KileMoran/chuiniubi-relay` 后重新部署 Pages；更改 `GAME` 绑定后也要重新部署。
+- **语音环境变量：** `CF_RTK_ACCOUNT_ID`、`CF_RTK_APP_ID`、`CF_RTK_PRESET` 为运行时文本变量，`CF_RTK_API_TOKEN` 是 **Secret**；主仓库 `wrangler.toml` 使用 `keep_vars = true` 防止常规 Wrangler 部署覆盖控制台变量。不要将 Token 写入 GitHub，也不要在修改代码时清空 `ROOMS`。
+- **现有房间：** 如果全部玩家离线超过两小时，房间会自动过期；更换设备或浏览器也可能因本地身份凭证不同无法恢复旧座位。
+- **服务可用性：** `pages.dev`、`github.io` 和语音媒体路径并不承诺中国大陆稳定可达；有关线路、域名、运营商限制须以实际网络测试和相关服务商当前政策为准。
 
 ## 16 · 常见问题与排查
+
+本表以主站/游戏操作为主；**中国大陆与英国互联的完整分层诊断请看 [第 15 节](#15--中国大陆与海外跨境联机)**。
 
 | 问题 | 可能原因 | 建议处理 |
 | --- | --- | --- |
