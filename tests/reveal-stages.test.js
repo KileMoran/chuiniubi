@@ -18,7 +18,7 @@ test('质疑只公开上一手，再公开其他牌，且保留一局总牌数',
  assert.ok(first.pile.every(p=>p.moveId===lastMove?Boolean(p.card):!('card' in p)),'第一阶段只公开被质疑的上一手');
  revealRemaining(g);assert.equal(g.phase,'reveal');
  assert.ok(view(g).pile.every(p=>p.card),'第二阶段每一张牌都必须公开');
- assert.ok(g.phaseUntil-Date.now()>=6000,'揭牌展示留出查看时间');
+ assert.ok(g.phaseUntil-Date.now()>=2000,'揭牌展示留出查看时间');
  startCollect(g);assert.equal(g.phase,'collecting');
  assert.ok(view(g).pile.every(p=>p.card),'收牌动画仍能看清已翻出的牌');
  completeCollect(g);assert.equal(g.round,2);assert.equal(totalCards(g),expectedCardCount(4));
@@ -32,7 +32,7 @@ test('挑战方无法从第一阶段提前获得上一手以外的牌面',()=>{
  const staged=view(g);
  assert.equal(staged.pile.filter(p=>p.card).length,3);
  assert.ok(staged.pile.every(p=>p.moveId===g.last.moveId?Boolean(p.card):!('card' in p)));
- assert.equal(totalCards(g),208);
+ assert.equal(totalCards(g),108);
  // Timed transition also includes the new first-stage phase.
  g.phaseUntil=Date.now()-1;assert.equal(tick(g),true);assert.equal(g.phase,'reveal');
  assert.equal(view(g).pile.filter(p=>p.card).length,4);

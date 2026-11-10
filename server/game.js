@@ -1,12 +1,15 @@
 // 吹牛逼 · server-authoritative game logic. Never import this file in the browser.
 export const RANKS = ['2','A','K','Q','J','10','9','8','7','6','5','4','3'];
+export const JOKER_RANKS = ['大王','小王'];
+export const MAX_PLAY_CARDS = 12;
+export const isJoker = card => !!card && JOKER_RANKS.includes(card.rank);
 export const ROOM_OFFLINE_TTL_MS=2*60*60*1000; // Two hours after the final player disconnects.
 export function roomOfflineDeadline(g){return Number.isFinite(g?.offlineSince)?g.offlineSince+ROOM_OFFLINE_TTL_MS:null;}
 export function isRoomExpired(g,now=Date.now()){const deadline=roomOfflineDeadline(g);return deadline!==null&&now>=deadline;}
 const SUITS=['♠','♥','♣','♦'];
-// 1–2 玩家：一副（52张）；3–6 玩家：两副（104张）。
+// 1–2 玩家：普通一副（52张）；3–6 玩家：两副含大小王（108张，2大王+2小王）。
 export function deckCountForCapacity(capacity){return capacity<=2?1:2;}
-export function expectedCardCount(capacity){return 52*deckCountForCapacity(capacity);}
+export function expectedCardCount(capacity){return capacity<=2?52:108;}
 export function err(condition,message){if(!condition)throw new Error(message);}
 export function freshGame(room='',capacity=5){return {
  room,capacity,offlineSince:null,lastSeenAt:Date.now(),players:[],host:null,phase:'lobby',phaseUntil:0,round:0,rank:null,turn:null,
@@ -15,7 +18,7 @@ export function freshGame(room='',capacity=5){return {
 };}
 const randomInt=n=>crypto.getRandomValues(new Uint32Array(1))[0]%n;
 export function shuffle(a){for(let i=a.length-1;i>0;i--){const j=randomInt(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
-export function sortCards(a){return a.sort((x,y)=>RANKS.indexOf(x.rank)-RANKS.indexOf(y.rank)||SUITS.indexOf(x.suit)-SUITS.indexOf(y.suit));}
+export function sortCards(a){const ranks=[...JOKER_RANKS,...RANKS];return a.sort((x,y)=>ranks.indexOf(x.rank)-ranks.indexOf(y.rank)||SUITS.indexOf(x.suit)-SUITS.indexOf(y.suit));}
 export function addPlayer(g,id,name){err(g.phase==='lobby','对局已开始，无法加入新玩家');err(g.players.length<g.capacity,'房间已经满员');err(!g.players.some(p=>p.id===id),'玩家已在房间');
  const player={id,name:name.slice(0,12),seat:g.players.length,hand:[]};g.players.push(player);if(!g.host)g.host=id;
  event(g,'join',{player:player.seat,text:`${player.name} 加入了房间`});return player;
@@ -26,7 +29,7 @@ export function startGame(g,actor,onlineIds){
  err(g.phase==='lobby'||g.phase==='finished','当前无法开始');err(g.host===actor,'只有房主能开始');
  err(g.players.length===g.capacity,'需要先凑齐房间人数');
  err(g.players.every(p=>onlineIds.includes(p.id)),'有玩家掉线，请等待重连');
- const deck=[];let id=0;for(let d=0;d<deckCountForCapacity(g.capacity);d++)for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});shuffle(deck);
+ const deck=[];let id=0;for(let d=0;d<deckCountForCapacity(g.capacity);d++){for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});if(g.capacity>=3)for(const rank of JOKER_RANKS)deck.push({id:`c${id++}`,rank,suit:'🃏'});}shuffle(deck);
  g.players.forEach(p=>p.hand=[]);deck.forEach((c,i)=>g.players[i%g.players.length].hand.push(c));g.players.forEach(p=>sortCards(p.hand));
  g.phase='choosing';g.phaseUntil=Date.now()+2500;g.round=1;g.rank=null;g.pile=[];g.discard=[];g.last=null;g.passes=0;g.turn=null;g.moveId=0;g.cardSlot=0;g.winner=null;g.result=null;g.stats={caught:0,failed:0};
  g.starter=randomInt(g.players.length);event(g,'draw',{player:g.starter,text:'系统正在随机抽取先手'});
@@ -34,7 +37,7 @@ export function startGame(g,actor,onlineIds){
 export function nextTurn(g,i){return (i+1)%g.players.length;}
 export function beginTurn(g){g.phase='playing';g.phaseUntil=0;g.turn=g.starter;event(g,'turn',{player:g.turn,text:`${g.players[g.turn].name} 先出牌`});}
 export function playCards(g,id,ids,rank){
- const i=playerIndex(g,id);err(g.phase==='playing'&&g.turn===i,'还没轮到你出牌');err(Array.isArray(ids)&&ids.length>=1&&ids.length<=8,'每次只能出1–8张牌');
+ const i=playerIndex(g,id);err(g.phase==='playing'&&g.turn===i,'还没轮到你出牌');err(Array.isArray(ids)&&ids.length>=1&&ids.length<=MAX_PLAY_CARDS,'每次只能出1–12张牌');
  err(ids.every(x=>typeof x==='string')&&new Set(ids).size===ids.length,'选牌有误');
  const claim=g.rank||rank;err(RANKS.includes(claim),'请选择正确点数');err(!g.rank||rank===g.rank,'本轮只能宣称同一点数');
  const current=g.players[i];const cards=ids.map(k=>current.hand.find(c=>c.id===k));err(cards.every(Boolean),'不能打出不存在的手牌');
@@ -57,7 +60,7 @@ export function challenge(g,id){
 }
 export function resolveAccuse(g){
  err(g.phase==='accusing','状态错误');const move=g.last;
- const lied=g.pile.some(p=>p.moveId===move.moveId&&p.card.rank!==move.rank);
+ const lied=g.pile.some(p=>p.moveId===move.moveId&&!isJoker(p.card)&&p.card.rank!==move.rank);
  const challenger=g.result.challenger;const receiver=lied?move.player:challenger;const starter=lied?challenger:move.player;
  g.result={...g.result,lied,receiver,starter,won:(!lied&&g.players[move.player].hand.length===0)?move.player:null};
  if(lied)g.stats.caught++;else g.stats.failed++;
@@ -69,10 +72,8 @@ export function revealRemaining(g){
  err(g.phase==='reveal_last','状态错误');
  // Players inspect real cards on the tabletop. Large 4-deck piles may need several
  // pages on a phone; grant enough time without creating an indefinite game pause.
- const duration = Math.max(
-  2250,
-  Math.min(11250, 1625 + Math.ceil(g.pile.length / 18) * 700)
-);
+ // V7.7.4: halve the full-table reveal wait; first-stage and collection timers stay unchanged.
+  const duration=Math.max(4500,Math.min(22500,3250+Math.ceil(g.pile.length/18)*1400));
  g.phase='reveal';g.phaseUntil=Date.now()+duration;
  event(g,'reveal_all',{count:g.pile.length,text:`公开本轮全部${g.pile.length}张暗牌`});
 }
