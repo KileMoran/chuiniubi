@@ -4,8 +4,8 @@ export const ROOM_OFFLINE_TTL_MS=2*60*60*1000; // Two hours after the final play
 export function roomOfflineDeadline(g){return Number.isFinite(g?.offlineSince)?g.offlineSince+ROOM_OFFLINE_TTL_MS:null;}
 export function isRoomExpired(g,now=Date.now()){const deadline=roomOfflineDeadline(g);return deadline!==null&&now>=deadline;}
 const SUITS=['♠','♥','♣','♦'];
-// 1–2 玩家：一副（52张）；3玩家：四副（208张）；4–6玩家：沿用两副（104张）。
-export function deckCountForCapacity(capacity){return capacity<=2?1:capacity===3?4:2;}
+// 1–2 玩家：一副（52张）；3–6 玩家：两副（104张）。
+export function deckCountForCapacity(capacity){return capacity<=2?1:2;}
 export function expectedCardCount(capacity){return 52*deckCountForCapacity(capacity);}
 export function err(condition,message){if(!condition)throw new Error(message);}
 export function freshGame(room='',capacity=5){return {
