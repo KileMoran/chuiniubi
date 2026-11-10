@@ -3,13 +3,13 @@ export const RANKS = ['2','A','K','Q','J','10','9','8','7','6','5','4','3'];
 export const JOKER_RANKS = ['大王','小王'];
 export const MAX_PLAY_CARDS = 12;
 export const isJoker = card => !!card && JOKER_RANKS.includes(card.rank);
-export const ROOM_OFFLINE_TTL_MS=2*60*60*1000; // Two hours after the final player disconnects.
+export const ROOM_OFFLINE_TTL_MS=2*60*60*1000;
 export function roomOfflineDeadline(g){return Number.isFinite(g?.offlineSince)?g.offlineSince+ROOM_OFFLINE_TTL_MS:null;}
 export function isRoomExpired(g,now=Date.now()){const deadline=roomOfflineDeadline(g);return deadline!==null&&now>=deadline;}
 const SUITS=['♠','♥','♣','♦'];
-// 1–2 玩家：普通一副（52张）；3–6 玩家：两副含大小王（108张，2大王+2小王）。
+// 1–2玩家：54张（1副含大小王）；3–6玩家：108张（2副含大小王）。
 export function deckCountForCapacity(capacity){return capacity<=2?1:2;}
-export function expectedCardCount(capacity){return capacity<=2?52:108;}
+export function expectedCardCount(capacity){return 54*deckCountForCapacity(capacity);}
 export function err(condition,message){if(!condition)throw new Error(message);}
 export function freshGame(room='',capacity=5){return {
  room,capacity,offlineSince:null,lastSeenAt:Date.now(),players:[],host:null,phase:'lobby',phaseUntil:0,round:0,rank:null,turn:null,
@@ -29,7 +29,7 @@ export function startGame(g,actor,onlineIds){
  err(g.phase==='lobby'||g.phase==='finished','当前无法开始');err(g.host===actor,'只有房主能开始');
  err(g.players.length===g.capacity,'需要先凑齐房间人数');
  err(g.players.every(p=>onlineIds.includes(p.id)),'有玩家掉线，请等待重连');
- const deck=[];let id=0;for(let d=0;d<deckCountForCapacity(g.capacity);d++){for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});if(g.capacity>=3)for(const rank of JOKER_RANKS)deck.push({id:`c${id++}`,rank,suit:'🃏'});}shuffle(deck);
+ const deck=[];let id=0;for(let d=0;d<deckCountForCapacity(g.capacity);d++){for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});for(const rank of JOKER_RANKS)deck.push({id:`c${id++}`,rank,suit:'🃏'});}shuffle(deck);
  g.players.forEach(p=>p.hand=[]);deck.forEach((c,i)=>g.players[i%g.players.length].hand.push(c));g.players.forEach(p=>sortCards(p.hand));
  g.phase='choosing';g.phaseUntil=Date.now()+2500;g.round=1;g.rank=null;g.pile=[];g.discard=[];g.last=null;g.passes=0;g.turn=null;g.moveId=0;g.cardSlot=0;g.winner=null;g.result=null;g.stats={caught:0,failed:0};
  g.starter=randomInt(g.players.length);event(g,'draw',{player:g.starter,text:'系统正在随机抽取先手'});
@@ -64,16 +64,12 @@ export function resolveAccuse(g){
  const challenger=g.result.challenger;const receiver=lied?move.player:challenger;const starter=lied?challenger:move.player;
  g.result={...g.result,lied,receiver,starter,won:(!lied&&g.players[move.player].hand.length===0)?move.player:null};
  if(lied)g.stats.caught++;else g.stats.failed++;
- // First stage: the challenged last play is revealed, while older pile cards remain secret.
  g.phase='reveal_last';g.phaseUntil=Date.now()+2900;
  event(g,'reveal_last',{player:challenger,text:lied?'抓到假牌！':'质疑失败！',lied,receiver});
 }
 export function revealRemaining(g){
  err(g.phase==='reveal_last','状态错误');
- // Players inspect real cards on the tabletop. Large 4-deck piles may need several
- // pages on a phone; grant enough time without creating an indefinite game pause.
- // V7.7.4: halve the full-table reveal wait; first-stage and collection timers stay unchanged.
-  const duration=Math.max(4500,Math.min(22500,3250+Math.ceil(g.pile.length/18)*1400));
+ const duration=Math.max(4500,Math.min(22500,3250+Math.ceil(g.pile.length/18)*1400));
  g.phase='reveal';g.phaseUntil=Date.now()+duration;
  event(g,'reveal_all',{count:g.pile.length,text:`公开本轮全部${g.pile.length}张暗牌`});
 }
@@ -87,7 +83,6 @@ export function completeCollect(g){
 export function finishCooldown(g){
  err(g.phase==='cooldown','状态错误');const last=g.last;
  if(g.players[last.player].hand.length===0){g.winner=last.player;g.phase='finished';g.phaseUntil=0;g.turn=null;event(g,'win',{player:g.winner,text:`${g.players[g.winner].name} 获胜！`});return;}
- // 单人练习没有其他玩家可以跟牌/质疑：每手结束后自动弃置暗牌并开启新回合。
  if(g.players.length===1){g.discard.push(...g.pile.map(p=>p.card));g.pile=[];newRound(g,last.player);return;}
  g.phase='playing';g.phaseUntil=0;g.turn=nextTurn(g,last.player);event(g,'turn',{player:g.turn,text:`轮到${g.players[g.turn].name}`});
 }
