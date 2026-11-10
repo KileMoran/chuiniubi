@@ -1011,7 +1011,7 @@ function onState(){
  render();
 }
 function renderLobby(){const m=state.me;
- $('lobbyTitle').textContent=`房间 ${state.room}`;$('lobbyCapacity').textContent=`${state.players.length} / ${state.capacity} 人 · ${state.deckCount|| (state.capacity<=2?1:state.capacity===3?4:2)} 副牌`;
+$('lobbyCapacity').textContent=`${state.players.length} / ${state.capacity} 人 · ${state.deckCount || (state.capacity<=2?1:2)} 副牌`;
  $('roomCode').textContent=state.room;
  $('lobbyPlayers').innerHTML=state.players.map((p,i)=>`<span class="room-player ${p.online?'':'offline'}">${i+1}. ${esc(p.name)}${p.host?' 👑':''}${p.online?'':'（离线）'}</span>`).join('');
  const isHost=m===state.host;
