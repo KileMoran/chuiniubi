@@ -2,6 +2,9 @@
 export const RANKS = ['2','A','K','Q','J','10','9','8','7','6','5','4','3'];
 export const JOKER_RANKS = ['大王','小王'];
 export const MAX_PLAY_CARDS = 12;
+// 彩蛋总触发率：每次成功出牌 3%；单人模式始终关闭。
+export const RANDOM_EVENT_CHANCE = 0.03;
+export const RANDOM_EVENT_TYPES = ['teacher','trashcan','faceup','phone'];
 export const isJoker = card => !!card && JOKER_RANKS.includes(card.rank);
 export const ROOM_OFFLINE_TTL_MS=2*60*60*1000;
 export function roomOfflineDeadline(g){return Number.isFinite(g?.offlineSince)?g.offlineSince+ROOM_OFFLINE_TTL_MS:null;}
@@ -14,7 +17,8 @@ export function err(condition,message){if(!condition)throw new Error(message);}
 export function freshGame(room='',capacity=5){return {
  room,capacity,offlineSince:null,lastSeenAt:Date.now(),players:[],host:null,phase:'lobby',phaseUntil:0,round:0,rank:null,turn:null,
  last:null,pile:[],discard:[],passes:0,moveId:0,cardSlot:0,winner:null,result:null,
- starter:null,eventId:0,event:{type:'lobby',text:'等待玩家加入'},stats:{caught:0,failed:0}
+ starter:null,eventId:0,event:{type:'lobby',text:'等待玩家加入'},stats:{caught:0,failed:0},
+ randomEventUsed:{},randomEventSeq:0,randomEvent:null,phoneBlock:null
 };}
 const randomInt=n=>crypto.getRandomValues(new Uint32Array(1))[0]%n;
 export function shuffle(a){for(let i=a.length-1;i>0;i--){const j=randomInt(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -32,10 +36,87 @@ export function startGame(g,actor,onlineIds){
  const deck=[];let id=0;for(let d=0;d<deckCountForCapacity(g.capacity);d++){for(const r of RANKS)for(const s of SUITS)deck.push({id:`c${id++}`,rank:r,suit:s});for(const rank of JOKER_RANKS)deck.push({id:`c${id++}`,rank,suit:'🃏'});}shuffle(deck);
  g.players.forEach(p=>p.hand=[]);deck.forEach((c,i)=>g.players[i%g.players.length].hand.push(c));g.players.forEach(p=>sortCards(p.hand));
  g.phase='choosing';g.phaseUntil=Date.now()+2500;g.round=1;g.rank=null;g.pile=[];g.discard=[];g.last=null;g.passes=0;g.turn=null;g.moveId=0;g.cardSlot=0;g.winner=null;g.result=null;g.stats={caught:0,failed:0};
+ g.randomEventUsed={};g.randomEventSeq ||= 0;g.randomEvent=null;g.phoneBlock=null;
  g.starter=randomInt(g.players.length);event(g,'draw',{player:g.starter,text:'系统正在随机抽取先手'});
 }
 export function nextTurn(g,i){return (i+1)%g.players.length;}
-export function beginTurn(g){g.phase='playing';g.phaseUntil=0;g.turn=g.starter;event(g,'turn',{player:g.turn,text:`${g.players[g.turn].name} 先出牌`});}
+export function beginTurn(g){g.phase='playing';g.phaseUntil=0;g.turn=g.starter;event(g,'turn',{player:g.turn,text:`${g.players[g.turn].name} 先出牌`});autoSkipPhonePlayer(g);}
+// 所有随机事件都由服务端执行，且一个事件在一局中至多触发一次。
+// 测试可显式指定 seat；线上随机抽取时不传 seat。
+export function applyRandomEvent(g,type,seat){
+ if(g.capacity<2||!RANDOM_EVENT_TYPES.includes(type))return null;
+ g.randomEventUsed ||= {};
+ if(g.randomEventUsed[type]||g.phase!=='cooldown'||!g.last)return null;
+ const eligible=type==='teacher'||type==='trashcan'
+  ? g.players.map((p,i)=>p.hand.length>=10?i:-1).filter(i=>i>=0)
+  : type==='phone' ? g.players.map((p,i)=>p.hand.length>0?i:-1).filter(i=>i>=0)
+  : [];
+ if(type!=='faceup'&&!eligible.length)return null;
+ if(type!=='faceup'&&seat!==undefined&&!eligible.includes(seat))return null;
+ const target=type==='faceup'?g.last.player:(seat??eligible[randomInt(eligible.length)]);
+ let text,title,slot=null;
+ if(type==='teacher'||type==='trashcan'){
+  const hand=g.players[target].hand;
+  const [card]=hand.splice(randomInt(hand.length),1);
+  g.discard.push(card); // 转移而非删除，保持整副牌总数恒定。
+  if(type==='teacher'){
+   title='郝老师突然走进宿舍！';
+   text=`${g.players[target].name} 吓得丢掉了1张牌！`;
+  }else{
+   title='刚刚出牌太猛，垃圾桶被踩烂了！';
+   text=`${g.players[g.last.player].name} 出牌太用力，踩烂脚边的垃圾桶！${g.players[target].name} 趁乱偷偷丢掉1张牌！`;
+  }
+ }else if(type==='faceup'){
+  const cards=g.pile.filter(p=>p.moveId===g.last.moveId);
+  if(!cards.length)return null;
+  const flipped=cards[randomInt(cards.length)];
+  flipped.peeked=true;slot=flipped.slot;
+  title='用力过猛！有一张牌翻过来了！';
+  text=`${g.players[target].name} 刚甩出的牌里，有一张 ${flipped.card.rank}${flipped.card.suit} 意外翻开，全员可见！`;
+ }else{
+  title='手机收到一条重要消息！';
+  text=`${g.players[target].name} 忙着回复消息，接下来4个玩家行动回合不能操作！`;
+  g.phoneBlock={player:target,remaining:4};
+ }
+ g.randomEventUsed[type]=true;
+ const info={id:++g.randomEventSeq,type,title,text,player:target,slot,round:g.round,moveId:g.last.moveId};
+ g.randomEvent=info;
+ return info;
+}
+export function maybeTriggerRandomEvent(g){
+ if(g.capacity<2||g.phase!=='cooldown'||!g.last)return null;
+ g.randomEventUsed ||= {};
+ const unused=RANDOM_EVENT_TYPES.filter(type=>!g.randomEventUsed[type]);
+ if(!unused.length||randomInt(10000)>=RANDOM_EVENT_CHANCE*10000)return null;
+ // 抽中不可执行事件时直接取消，不补抽，也不消耗该事件名额。
+ return applyRandomEvent(g,unused[randomInt(unused.length)]);
+}
+function completedPlayerTurn(g){
+ if(g.phoneBlock){g.phoneBlock.remaining--;
+  if(g.phoneBlock.remaining<=0)g.phoneBlock=null;
+ }
+}
+// 自动跳过被禁用玩家，不依赖前端按钮；新回合首手也可安全顺延。
+export function autoSkipPhonePlayer(g){
+ let guard=0;
+ while(g.phase==='playing'&&g.phoneBlock&&g.turn===g.phoneBlock.player&&guard++<g.players.length){
+  const i=g.turn;const name=g.players[i].name;
+  completedPlayerTurn(g);
+  if(!g.last){
+   g.turn=nextTurn(g,i);
+   event(g,'phone_skip',{player:i,text:`${name} 正在回复手机消息，本次首出自动跳过`});
+  }else{
+   g.passes++;
+   if(g.passes>=g.players.length-1){
+    g.phase='discarding';g.phaseUntil=Date.now()+650;g.turn=null;
+    event(g,'discarding',{count:g.pile.length,text:`${name} 回复手机消息，自动不出；其余玩家全部不出，本轮暗牌弃置`});
+   }else{
+    g.turn=nextTurn(g,i);
+    event(g,'phone_skip',{player:i,text:`${name} 正在回复手机消息，本次自动不出`});
+   }
+  }
+ }
+}
 export function playCards(g,id,ids,rank){
  const i=playerIndex(g,id);err(g.phase==='playing'&&g.turn===i,'还没轮到你出牌');err(Array.isArray(ids)&&ids.length>=1&&ids.length<=MAX_PLAY_CARDS,'每次只能出1–12张牌');
  err(ids.every(x=>typeof x==='string')&&new Set(ids).size===ids.length,'选牌有误');
@@ -44,15 +125,18 @@ export function playCards(g,id,ids,rank){
  const keep=new Set(ids);current.hand=current.hand.filter(c=>!keep.has(c.id));g.rank=claim;g.passes=0;g.turn=null;
  const moveId=++g.moveId;for(const card of cards)g.pile.push({slot:++g.cardSlot,owner:i,moveId,card});
  g.last={player:i,rank:claim,count:cards.length,moveId};g.phase='cooldown';g.phaseUntil=Date.now()+2000;
- event(g,'play',{player:i,count:cards.length,rank:claim,moveId,text:`${current.name} 出了${cards.length}张${claim}`});
+ completedPlayerTurn(g);
+ const randomEvent = current.hand.length>0 ? maybeTriggerRandomEvent(g) : null;
+ event(g,'play',{player:i,count:cards.length,rank:claim,moveId,text:`${current.name} 出了${cards.length}张${claim}`+(randomEvent?` · 🎲 ${randomEvent.title} ${randomEvent.text}`:'')});
 }
 export function passTurn(g,id){
  const i=playerIndex(g,id);err(g.phase==='playing'&&g.turn===i,'现在不能不出牌');err(g.last,'本轮第一手必须出牌');
- g.passes++;if(g.passes>=g.players.length-1){g.phase='discarding';g.phaseUntil=Date.now()+650;g.turn=null;event(g,'discarding',{count:g.pile.length,text:'所有其他玩家不出牌，本轮暗牌弃置'});}
- else{g.turn=nextTurn(g,i);event(g,'pass',{player:i,text:`${g.players[i].name} 不出牌`});}
+ completedPlayerTurn(g);g.passes++;if(g.passes>=g.players.length-1){g.phase='discarding';g.phaseUntil=Date.now()+650;g.turn=null;event(g,'discarding',{count:g.pile.length,text:'所有其他玩家不出牌，本轮暗牌弃置'});}
+ else{g.turn=nextTurn(g,i);event(g,'pass',{player:i,text:`${g.players[i].name} 不出牌`});autoSkipPhonePlayer(g);}
 }
 export function challenge(g,id){
  const i=playerIndex(g,id);err(i>=0,'无效玩家');
+ err(g.phoneBlock?.player!==i,'你正在回复重要消息，暂时不能质疑');
  err(['cooldown','playing'].includes(g.phase)&&g.last,'当前不能质疑');err(i!==g.last.player,'不能质疑自己');
  g.phase='accusing';g.phaseUntil=Date.now()+1500;g.turn=null;
  g.result={challenger:i,bluffer:g.last.player,receiver:null,starter:null,lied:null,won:null};
@@ -84,11 +168,11 @@ export function finishCooldown(g){
  err(g.phase==='cooldown','状态错误');const last=g.last;
  if(g.players[last.player].hand.length===0){g.winner=last.player;g.phase='finished';g.phaseUntil=0;g.turn=null;event(g,'win',{player:g.winner,text:`${g.players[g.winner].name} 获胜！`});return;}
  if(g.players.length===1){g.discard.push(...g.pile.map(p=>p.card));g.pile=[];newRound(g,last.player);return;}
- g.phase='playing';g.phaseUntil=0;g.turn=nextTurn(g,last.player);event(g,'turn',{player:g.turn,text:`轮到${g.players[g.turn].name}`});
+ g.phase='playing';g.phaseUntil=0;g.turn=nextTurn(g,last.player);event(g,'turn',{player:g.turn,text:`轮到${g.players[g.turn].name}`});autoSkipPhonePlayer(g);
 }
 export function finishDiscard(g){err(g.phase==='discarding','状态错误');const nextStarter=g.last.player;
  g.discard.push(...g.pile.map(p=>p.card));g.pile=[];newRound(g,nextStarter);}
-export function newRound(g,starter){g.phase='playing';g.phaseUntil=0;g.turn=starter;g.rank=null;g.last=null;g.passes=0;g.result=null;g.round++;event(g,'round',{player:starter,text:`第${g.round}轮，${g.players[starter].name}先出牌`});}
+export function newRound(g,starter){g.phase='playing';g.phaseUntil=0;g.turn=starter;g.rank=null;g.last=null;g.passes=0;g.result=null;g.round++;event(g,'round',{player:starter,text:`第${g.round}轮，${g.players[starter].name}先出牌`});autoSkipPhonePlayer(g);}
 export function tick(g){
  if(!g.phaseUntil||Date.now()<g.phaseUntil)return false;
  switch(g.phase){case 'choosing':beginTurn(g);return true;case 'cooldown':finishCooldown(g);return true;case 'accusing':resolveAccuse(g);return true;case 'reveal_last':revealRemaining(g);return true;case 'reveal':startCollect(g);return true;case 'collecting':completeCollect(g);return true;case 'discarding':finishDiscard(g);return true;default:return false;}
@@ -100,7 +184,7 @@ export function publicState(g,id,onlineIds=[]){
  return {room:g.room,capacity:g.capacity,host:playerIndex(g,g.host),me:index,players:g.players.map(p=>({id:`seat-${p.seat}`,name:p.name,seat:p.seat,count:p.hand.length,online:onlineIds.includes(p.id),host:p.id===g.host})),
  phase:g.phase,phaseUntil:g.phaseUntil,serverNow:Date.now(),round:g.round,rank:g.rank,deckCount:deckCountForCapacity(g.capacity),turn:g.turn,starter:g.phase==='choosing'?null:g.starter,
  last:g.last?{...g.last}:null,passes:g.passes,discardCount:g.discard.length,
- pile:g.pile.map(p=>({slot:p.slot,owner:p.owner,moveId:p.moveId,...((revealAll||(revealLast&&p.moveId===g.last?.moveId))?{card:p.card}: {})})),
+ pile:g.pile.map(p=>({slot:p.slot,owner:p.owner,moveId:p.moveId,peeked:!!p.peeked,...((p.peeked||revealAll||(revealLast&&p.moveId===g.last?.moveId))?{card:p.card}: {})})),
  hand:index>=0?g.players[index].hand:[],winner:g.winner,result:(revealAll||revealLast)?g.result:null,
- event:g.event,stats:g.stats,onlineCount:onlineIds.length};
+ event:g.event,stats:g.stats,onlineCount:onlineIds.length,randomEvent:g.randomEvent||null,phoneBlock:g.phoneBlock||null,randomEventUsed:g.randomEventUsed||{}};
 }
