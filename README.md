@@ -1,77 +1,92 @@
-# 吹牛逼 V7.8 — 大小王万能癞子 / 每手12张 / 实时选牌计数
+# 吹牛逼 · V7.9 联机扑克牌游戏
 
-**开发日期：2026-11-10**
+> 本文档对应 2026-11-11 已上传的 V7.9 主站及 `server/game.js` 游戏规则。该项目为网页游戏，前端发布在 GitHub Pages，房间和规则运行在 Cloudflare Workers + Durable Objects；语音使用 Cloudflare RealtimeKit。
 
-> ⚠️ 本更新包只包含代码补丁，**还没有写入 GitHub 或部署 Cloudflare**。ChatGPT 连接 GitHub 时收到 `403 Resource not accessible by integration`（无写入权限）。不要把“本地测试通过”理解成“线上已上线”。
+- 游戏主站：<https://kilemoran.github.io/chuiniubi/>
+- 中国玩家备用入口：<https://chuiniubi-relay.pages.dev/>
+- 本仓库：<https://github.com/KileMoran/chuiniubi>
+- 备用入口代码：<https://github.com/KileMoran/chuiniubi-relay>
 
-## 新规则
+## 一、游戏规则（以服务端 `server/game.js` 为准）
 
-| 游戏人数 | 用牌 | 备注 |
-| --- | --- | --- |
-| 1–2 人 | 一副普通牌，52 张 | 暂不加大小王 |
-| 3–6 人 | 两副含大小王的牌，108 张 | 2 大王 + 2 小王，共 4 张癞子 |
+| 人数 | 牌组 | 总张数 | 每副牌的大小王 |
+|---|---|---:|---|
+| 1 人 | 1 副 | 54 | 有（纯测试模式） |
+| 2 人 | 1 副 | 54 | 有 |
+| 3–6 人 | 2 副 | 108 | 有 |
 
-- **大小王是万能癞子：** 无论本轮宣称 3、7、K、A 等什么合法点数，大小王都算作该点数。质疑时不算假牌。
-- **普通假牌仍算假：** 如果一手里同时出了大小王和与宣称不相符的普通牌，质疑仍成功。
-- **每次最多12张：** 前后端共同限制；第13张不能再选择，服务端也会拒绝一次出13张的请求。
-- **实时已选牌数：** 按钮显示 `出牌 · 已选 X/12`，顶部和选牌预览同步更新。
-- **视觉：** 大王、小王有特别牌面与“癞子”标识，桌面公开牌时不会被红色标记为假牌。
+- 创建房间时选择 1–6 人；必须人数凑齐、所有玩家在线，房主才能开始。
+- 每局系统随机决定首手玩家。每一轮的第一手须自己选择要宣称的点数（3–10、J、Q、K、A、2）；之后跟牌只能沿用该点数，即使实际手牌不符合也可以撒谎。
+- 每次可出 **1–12 张牌**，前端实时显示已选择张数，服务端再次核验。单人模式仅用于自行测试，没有随机彩蛋。
+- 每副牌各有大王、小王，两者均为**万能癞子**：可以视作本轮宣称的点数，因此不算假牌；但同一手里的其他普通牌若与宣称点数不符，整手依然是撒谎。
+- 玩家出牌后有约 **2 秒保护间隔**，防止下一位玩家立刻出牌。**两秒不是质疑截止时间**：其他玩家可以在刚出牌的冷却阶段及下一位玩家尚未完成出牌的阶段质疑上一手；无法质疑自己。
+- 质疑成功：撒谎者收下桌上本轮全部牌，质疑者获得下一轮先手。质疑失败：质疑者收牌，真实出牌者获得下一轮先手。
+- 质疑后先翻最后被质疑的那一手，再公开本轮其余牌，最后才执行收牌。无其他玩家继续出牌时，本轮暗牌弃置，由最近的出牌者先手。
+- 一名玩家在合法完成最后一手牌且没有被成功抓假牌时获胜。正常玩家掉线后可通过原浏览器凭证重连恢复手牌。
 
-## 推荐操作（Windows，使用 Python）
+## 二、V7.9 随机事件（彩蛋）
 
-**先备份仓库或保留当前 GitHub commit。** 不建议用旧版 `index.html` 整页覆盖现有版本。
+服务端每次成功出牌后，以 **3% 的总概率**尝试触发**一种**随机事件（不是每种事件各 3%）。单人模式不会触发。**每种事件每局最多发生一次，同一手最多发生一个事件。** 不符合条件的事件被抽中则本次不触发，且不占用次数。
 
-1. 打开主游戏 GitHub 仓库：<https://github.com/KileMoran/chuiniubi>，点击 **Code → Download ZIP**，解压为 `chuiniubi-main`。
-2. 把这个补丁包解压后的 **`apply-upgrade.py`、`rules.json` 和 `tests/joker-rules.test.js`** 放进 `chuiniubi-main` 里（补丁文件 `tests/joker-rules.test.js` 放在仓库 `tests/` 目录）。
-3. 在 `chuiniubi-main` 文件夹打开 Windows PowerShell 或终端，执行：
+| 事件 | 效果 |
+|---|---|
+| 郝老师突然走进宿舍 | 随机一名符合条件的玩家丢 1 张牌 |
+| 垃圾桶被踩烂 | 随机一名符合条件的玩家丢 1 张牌 |
+| 有牌意外翻开 | 将刚出的一手中的随机 1 张牌提前亮给所有人 |
+| 手机收到重要消息 | 随机玩家在之后 4 个玩家行动回合内无法操作，轮到该玩家时由服务器跳过 |
 
-   ```powershell
-   py apply-upgrade.py .
-   ```
+前两种丢牌事件要求目标玩家至少有 **10 张手牌**；丢出的牌移入弃牌堆，游戏总张数保持守恒。第四种事件的倒计时按全体玩家接下来的行动推进，不等于被选中玩家自己的四次出牌机会。
 
-   如果没有 `py`，可使用 `python apply-upgrade.py .`。该脚本只在所有目标代码段正确匹配后才开始写入，无法匹配时会停止，不盲目覆盖。
-4. 如果已经安装 Node.js，可在该文件夹执行：
+## 三、项目文件结构
 
-   ```powershell
-   npm test
-   ```
-
-   自动化测试应全部通过。该步骤不需要启动 Cloudflare，也不需要任何 RealtimeKit Token。
-5. **提交到 GitHub：** 最省事的方法是用 GitHub Desktop 克隆主仓库，再在它的本地目录执行步骤 2–4，然后在 GitHub Desktop 中 Commit、Push。若使用下载 ZIP 而非克隆仓库，也可以在 GitHub 网页上逐一上传下面列出的正确路径的更新文件，避免把 `server/` 或 `tests/` 文件错误地放在仓库根目录。
-
-## 此次需要更新的 GitHub 文件
-
-- `server/game.js` — 108 张发牌、大小王排序、癞子判定、12 张上限
-- `index.html` — 大小王视觉、翻牌真假标记、选牌与按钮实时计数
-- `tests/game.test.js` — 旧测试按 108 张、12 张及普通牌判断更新
-- `tests/reveal-stages.test.js` — 按真实当前翻牌计时和 108 张更新
-- `tests/joker-rules.test.js` — 新增大小王、假牌、12/13 张、隐私测试
-- `README.md` — 规则文档（保留跨境联机章节）
-- `CHANGELOG.md` — 添加本次改动说明
-
-`apply-upgrade.py`、`apply-upgrade.mjs`、`rules.json` 不必提交到 GitHub（只是本地更新工具）；如果想保留，也可以自行放进 `tools/` 目录再提交。
-
-## 使用 Node.js 的替代方式
-
-把 `apply-upgrade.mjs` 和 `tests/joker-rules.test.js` 放在与上面相同的位置（`rules.json` 只供 Python 版使用），在仓库根目录执行：
-
-```bash
-node apply-upgrade.mjs .
-npm test
+```text
+index.html                    GitHub Pages 主页（内含 UI、游戏客户端、语音前端）
+server/game.js                当前唯一使用的服务器游戏规则
+server/worker.js              Cloudflare Worker、WebSocket、房间/语音 API
+wrangler.toml                 Worker 和 Durable Objects 绑定配置
+package.json                  本地开发/测试脚本
+README.md                     本说明
+CHANGELOG.md                  更新日志
+DEPLOY_GUIDE.md               发布与部署说明
+tests/game.test.js            常规游戏规则测试
+tests/joker-rules.test.js     大小王和 12 张限制测试
+tests/random-events.test.js   随机事件测试
+tests/reveal-stages.test.js   双阶段揭牌和隐私测试
+tests/room-lifecycle.test.js  房间重连/过期测试
+preview/                      界面预览图片
 ```
 
-## GitHub 更新完成后如何上线
+旧根目录 `game.js` 不是 Worker 使用的模块，旧 `apply-upgrade.py`、`apply-upgrade.mjs`、`rules.json` 和 `UPLOAD_GUIDE.md` 是历史补丁工具/操作说明，不是当前运行游戏所需文件。请保留 Git 历史后再清理这些旧文件，避免误用。
 
-游戏逻辑在 Worker 上运行。**仅提交 GitHub 而没有触发 Cloudflare 的 Worker 更新，线上游戏仍然使用旧牌组。**
+## 四、跨国联机的工作方式
 
-1. 确认 GitHub 的 `server/game.js` 和 `index.html` 已更新。
-2. 在 Cloudflare 控制台确认原 `my-chuiniubi-room` Worker 已部署包含这次修改的新代码；如果没有自动部署，需要通过主仓库的 Wrangler 配置重新部署。
-3. 不要删掉 `wrangler.toml` 中的 `keep_vars = true`，也不要改动 `ROOMS` Durable Objects 绑定和四个 `CF_RTK_*` 语音运行时配置。
-4. 让朋友创建一个**新的**三人或四人房间，确认共有 108 张（3人每人36张；4人每人27张），大王和小王各有2张。
-5. 双方分别从英国主站、国内备用入口测试同一个房间，确认出牌、掀牌、语音都能正常进行。
+1. 英国玩家可直接从主游戏网站加入同一 6 位房间，默认 WebSocket 连接主 Worker：`wss://my-chuiniubi-room.syc050609.workers.dev`。
+2. 中国玩家先打开 `https://chuiniubi-relay.pages.dev/`，输入房间号。备用大厅跳转到主站时会把 WebSocket 服务器参数设置为 `wss://chuiniubi-relay.pages.dev`。
+3. `chuiniubi-relay` 的 Pages Functions 通过 **Service Binding `GAME`** 转发 `/ws` 和 `/health` 到同一个 `my-chuiniubi-room` Worker。它不另建房间，不复制牌局数据，也不存储玩家手牌。
+4. 备用入口能打开不代表各网络都能稳定建立 WebSocket；语音也需要单独验证，因为 RealtimeKit 媒体连接不经游戏的 `/ws` 代理。
 
-**注意：** 已经开始的旧房间不会自动在牌局中增加大小王。请在新部署后重新创建房间验证新规则。
+## 五、语音与配置安全
 
-## 实测说明
+`server/worker.js` 的 RealtimeKit 语音接口仍使用下列 Cloudflare Worker 运行环境变量（此处只列名称，不包含具体值）：
 
-在隔离的本地副本中运行了 `npm test`：18/18 测试通过，前端 JavaScript 已通过 `node --check` 语法检查；不代表已经在真实两人跨国 WebSocket 房间或 RealtimeKit 语音里完成端到端测试。该更新包不包含任何密钥或个人身份令牌。
+- `CF_RTK_ACCOUNT_ID`
+- `CF_RTK_APP_ID`
+- `CF_RTK_API_TOKEN`（Secret）
+- `CF_RTK_PRESET`
+
+Worker 同时需要 Durable Objects 绑定 `ROOMS → GameRoom`。`wrangler.toml` 中保留 `keep_vars = true`，不要将 Token 写进 GitHub 文件或分享到聊天截图。
+
+所有玩家离线持续 **2 小时**后，房间会由 Worker 的 Alarm 清除；有玩家持续在线则不会仅因不操作而到期。清理过的房间须重新创建。
+
+## 六、更新与验证
+
+详细上传/部署步骤见 [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)。**只更新本 README、CHANGELOG 或 `tests/`，不需要重新部署 Worker**。若改动 `server/game.js` 或 `server/worker.js`，必须确保 Cloudflare Worker 同步发布；若改动 `index.html`，必须确保 GitHub Pages 已发布并让玩家刷新。
+
+- 服务器健康检查：<https://my-chuiniubi-room.syc050609.workers.dev/health>
+- 备用健康检查：<https://chuiniubi-relay.pages.dev/health>
+
+注意：Worker 的 `/health` 中 `version: 1.1-voice` 是语音/接口标识；如果 `gameplay` 字段仍显示 `v7.7.3`，这是旧的静态版本字符串，不代表当前牌组规则一定仍为 V7.7.3。确认实际规则要核对部署代码并新建房间测试。
+
+## 七、当前维护说明
+
+2026-11-11 的 V7.9 维护修复主要更新基础规则及大小王测试，使其与当前 54/108 张真实服务端一致，避免普通测试偶发触发随机彩蛋，并清理过期文档。**本维护不改变**线上游戏的出牌、质疑时间、随机事件概率、语音与联机协议。是否上线成功仍以生产环境具体部署和实际玩家连接验证为准。

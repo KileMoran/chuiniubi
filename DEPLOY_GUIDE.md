@@ -1,55 +1,67 @@
-> **V7.7.3**：需同时更新 `index.html`、`server/game.js`、`server/worker.js`，并重新部署原 `my-chuiniubi-room` Worker；仅替换前端无法触发服务端分阶段揭牌。`GAME` Pages Binding 保持原状。
+# 吹牛逼 V7.9 · GitHub 更新与 Cloudflare 发布说明
 
-# 吹牛逼 V7.7.3 发布说明（GitHub + Cloudflare）
+## 先确认：本次维护需要部署什么？
 
-## 本版需要同步的文件
+**只更新测试与文档时，Cloudflare Worker 不需要重新部署。** 本次替换的 `README.md`、`CHANGELOG.md`、`DEPLOY_GUIDE.md` 与 `tests/game.test.js`、`tests/joker-rules.test.js`、`tests/reveal-stages.test.js` 不会改变实际游戏逻辑，也不需要在 GitHub 里运行 npm。
 
-仓库：`https://github.com/KileMoran/chuiniubi`（主游戏仓库，**不是** `chuiniubi-relay`）。
+| 变更的文件 | 需要的操作 |
+|---|---|
+| `README.md`、`CHANGELOG.md`、`DEPLOY_GUIDE.md`、`tests/` | 上传提交 GitHub 即可；无须更新 Worker |
+| `index.html` | GitHub Pages 自动发布后刷新网页 |
+| `server/game.js` 或 `server/worker.js` | 上传 GitHub **并确认原 Worker 已重新部署**；否则线上服务器仍会运行旧代码 |
+| `chuiniubi-relay` 仓库内的 `functions/` 或 `public/` | 需该独立 Pages 项目重新发布 |
 
-1. `index.html` — V7.7.3 页面、居中选点、中央叠牌、在牌桌原地分两阶段翻牌。
-2. `server/game.js` — 发牌副数、单人模式、质疑后分两阶段公开牌面的服务器状态。
-3. `server/worker.js` — 允许 1–6 人创建房间、校验不同人数的牌总数、保留语音服务逻辑。
-4. `tests/game.test.js`、`tests/reveal-stages.test.js` 与 `tests/room-lifecycle.test.js` — 规则、翻牌隐私与房间生命周期测试（建议更新）。
-5. `README.md` — 游戏说明（建议更新）。
-6. `CHANGELOG.md` — 新增 V7.7.3 更新日志（建议上传）。
+## 一、最简单的网页上传方法
 
-`wrangler.toml` 和 `package.json` 没有改动，请保留 GitHub 现有文件。**不要使用旧的 wrangler.toml 覆盖线上配置**，尤其不要丢失现有的 `keep_vars = true`，以免影响 RealtimeKit 环境变量或密钥。
+1. 打开主仓库 <https://github.com/KileMoran/chuiniubi>，确认当前分支为 `main`。
+2. 下载 ChatGPT 提供的 ZIP 并解压；在 GitHub 仓库页面选择 **Add file → Upload files**（如果看不到，留意右侧 `+` 菜单）。
+3. **把解压后的文件和 `tests` 文件夹内容保留原目录结构上传**。不要多套一层 `UPLOAD_TO_GITHUB/` 目录。确认目的路径应为 `tests/game.test.js` 和 `tests/joker-rules.test.js`，而不是仓库根目录的两个测试文件。
+4. 覆盖同名旧文件，提交说明可填 `Fix V7.9 tests and update documentation`，点击 **Commit changes**。
+5. 检查提交后的文件路径和 README 首页内容已经改变。若 GitHub Pages 因提交触发构建，网页可能会构建一次，但本次没有改 `index.html`，游戏界面不变。
 
-## 发布顺序
+### 建议删除的历史文件
 
-1. 先在本地保留现有仓库副本，或确认 GitHub Commit History 可用。
-2. 将上面改动文件保持对应目录结构提交到 `KileMoran/chuiniubi` 的 `main` 分支。
-3. 在 Cloudflare Workers & Pages > `my-chuiniubi-room` 查看 GitHub Builds 或 Deployments，确保最新 Worker 版本确实发布成功；若 Git 集成没自动部署，按照当前原 Worker 项目的既有部署流程触发一次部署。
-4. 打开 `https://chuiniubi-relay.pages.dev/health` 或原 Worker `/health`。新版服务响应应包含 `"gameplay":"v7.7.3"` 和 `"roomIdlePolicy":"2h-offline"`；原 `"version":"1.1-voice"` 字段保持不变。
-5. 确认 GitHub Pages 主站已发布 V7.7.3，并在电脑/手机强制刷新。打开 `https://kilemoran.github.io/chuiniubi/` 查看创建房间下拉框是否出现 1–6 人。
-6. 用**全新的六位房间号**测试单人、双人、三人、质疑后选择牌面、翻牌及断线重连。已进行中的旧房间最好等对局结束后再升级。
+在确认上述新文件上传正确后，以下文件可从主仓库根目录删除：
 
-### 中国玩家入口
+- `game.js`（旧独立游戏逻辑；真正 Worker 使用的是 `server/game.js`）
+- `apply-upgrade.py`（旧升级脚本）
+- `apply-upgrade.mjs`（旧升级脚本）
+- `rules.json`（旧补丁规则配置，不是运行中的规则来源）
+- `UPLOAD_GUIDE.md`（旧补丁上传说明）
 
-`https://chuiniubi-relay.pages.dev/` 和现有 `GAME` Service Binding 无需修改。中国玩家入口跳转到主站时会使用备用 WebSocket 地址。升级后仍能连同一个 Worker；需要让所有玩家刷新网页以获取新版前端。
+**千万不要删除** `index.html`、`server/game.js`、`server/worker.js`、`wrangler.toml`、`package.json`、`tests/random-events.test.js`、`tests/reveal-stages.test.js`、`tests/room-lifecycle.test.js` 或 `preview/`。删除旧文件前可使用仓库的 Git 历史恢复；如你仍在其他电脑上使用旧补丁脚本，请先保留它们。
 
-### 注意
+## 二、如果今后修改了服务器逻辑
 
-- 不要把主站 `index.html` 上传到 `chuiniubi-relay/public/index.html`：两者是不同网站。
-- 不要删除或覆盖 Cloudflare RealtimeKit 环境变量和 `CF_RTK_API_TOKEN` 密钥。新版本 Worker 保留了原语音代码。
-- 用户最初列出的 “1…A 2” 按标准扑克点数实现为 13 个牌面：3–10、J、Q、K、A、2；不添加重复的数字 2。每次最多出 8 张牌的限制没有变化。
-- 单人模式无对手质疑：每手牌结束后自动弃牌并开启新回合。
-- 1–2 人：52 张；3 人：208 张；4–6 人：104 张；均没有大小王。
+Cloudflare 生产 Worker 目前叫 `my-chuiniubi-room`，其 `ROOMS` Durable Object 绑定类名是 `GameRoom`，语音功能依赖四个 `CF_RTK_*` 配置。不要创建同名新项目，不要误删绑定或把 Token 上传 GitHub。
 
+1. 先在 GitHub 上更新 `server/game.js` / `server/worker.js`（若前端协议也变，需同时更新 `index.html`）。
+2. 进入 <https://dash.cloudflare.com/> → **Workers & Pages** → `my-chuiniubi-room`。
+3. 看最新 **Deployments** 是否确实包含这次服务器更新。**只看到 GitHub Pages 成功不代表 Worker 成功。**
+4. 如果使用 Git 集成自动发布，查看构建与部署记录；若你的项目实际通过 Wrangler 手动发布，则需要在自己的开发环境或原有自动化流程完成部署，**不能只上传 GitHub 后假设它自动更新**。
+5. 打开 Worker `/health` 和国内 Pages `/health`，再创建**新房间**测试新规则。已进行中的旧房间尽量不要在对局中升级。
 
-## V7.7.3 视觉与翻牌改动
-- 手动选点菜单居中但不模糊游戏画面，手机横屏时放在左侧牌桌中心以完整露出右侧手牌。
-- 全部玩家出牌叠放桌面中央，偏移和旋转为按卡牌编号确定的乱序位置。
-- 质疑先展示最后一手和真假判定，随后直接在同一张纸箱桌面上摊开本轮全部牌面。牌多时通过牌桌上的左右箭头逐页查看，没有翻牌提示框或独立牌廊。
-- 必须同时更新主站网页与原 Worker 才能实现双阶段翻牌。
+Worker 地址：<https://my-chuiniubi-room.syc050609.workers.dev/health>
+备用健康检查：<https://chuiniubi-relay.pages.dev/health>
 
-## V7.7.1 房间自动清理
-- 无玩家在线持续 2 小时，Durable Object Alarm 会删除房间持久化数据；同一个旧房间号不会被自动恢复。
-- 旧前端即使尝试重连已经过期的房间，服务器返回 WebSocket 关闭码 4001；新前端会清除对应本地房间记录并回到主菜单。
-- 配置保留现有 Worker 名称 `my-chuiniubi-room`、`ROOMS` 绑定、所有 RealtimeKit secrets 和中国 Pages `GAME` Service Binding。
-- 已开局房间请尽量结束后再部署：旧版本长期无人在线的房间可能在首次访问时被清理。
+> 当前 `server/worker.js` 的 `gameplay` 健康检查标识仍可能是旧的 `v7.7.3`。这个字段是手工写死的版本文本。若未来只想修正版本文字，需要在 `server/worker.js` 的 `/health` 响应中修改 `gameplay` 字符串并部署 Worker；语音接口版本 `1.1-voice` 可保持原样。本次修复包不修改 Worker，以避免不必要的重部署。
 
-### 期限说明
-- `2 小时` 是**最后一名玩家掉线之后**计时，不是房间创建后 2 小时强制踢人。
-- 如果你希望改成 30 分钟或其他时长，需要同步更新 `server/game.js` 与 `index.html` 中的 `ROOM_OFFLINE_TTL_MS`。
-- 无法确认活跃时间的 V7.7 或更早版本旧房间，如果此刻没有在线玩家，将在第一次触发该 Durable Object 时清理；新版本创建的房间则会正常设置自动到期闹钟。
+## 三、中国玩家连接与语音
+
+- 主站：<https://kilemoran.github.io/chuiniubi/>
+- 备用入口：<https://chuiniubi-relay.pages.dev/>
+- Pages 项目 Service Binding：`GAME` → `my-chuiniubi-room`，环境为 Production。
+- `/health` 是 HTTP 测试；`/ws` 是 WebSocket 游戏连接；两者成功**不保证** RealtimeKit 语音在中国网络可用，必须用两台实际设备测试麦克风。
+- 语音配置应继续保存在原 Cloudflare Worker 中：`CF_RTK_ACCOUNT_ID`、`CF_RTK_APP_ID`、`CF_RTK_PRESET`、`CF_RTK_API_TOKEN`（Secret）。
+
+## 四、不使用命令行的检查清单
+
+1. GitHub `main` 分支中，`tests/game.test.js`、`tests/joker-rules.test.js` 和 `tests/reveal-stages.test.js` 仍在 `tests` 目录。
+2. README 写的是 1–2 人 **54 张**、3–6 人 **108 张**，每副有大小王。
+3. 游戏网页的出牌按钮最多 **12 张**，并显示选牌数量。
+4. 两秒保护间隔结束后，下一玩家未出牌时仍可质疑上一手。
+5. 创建四人新房间，每人初始应为 **27 张**；两人新房间，每人 **27 张**。
+6. 四种随机事件均有展示代码，单人模式无随机事件；少量试玩未触发彩蛋是正常的（只有 3% 的总概率）。
+7. 语音按钮能请求麦克风，国内/英国玩家分别尝试同房间连接和通话。
+
+若需要回滚，在 GitHub 历史中找到这次维护前的最新提交 `1d3a3ade3ecabe140d1d4b5b094383113b9aff1f`。回滚网页与 GitHub 文件不等于自动回滚 Cloudflare 已部署 Worker；两者分别管理。
